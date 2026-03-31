@@ -3,6 +3,7 @@ import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { Agent, Message, ModelConfig } from '@/types/agent';
 import { injectProjectContext, buildProjectContextFromProject } from '@/lib/project-context';
+import { getAgentTasks, injectTaskContext } from '@/lib/agent-tasks';
 
 // POST /api/chat - AI对话(流式输出)
 export async function POST(request: NextRequest) {
@@ -136,14 +137,18 @@ export async function POST(request: NextRequest) {
       console.error('获取历史消息失败:', msgError);
     }
     
-    // 构建消息数组 - 注入项目上下文
-    const systemPromptWithProject = injectProjectContext(
+    // 构建消息数组 - 注入项目上下文和任务上下文
+    let systemPrompt = injectProjectContext(
       targetAgent.system_prompt,
       projectContext
     );
     
+    // 获取智能体待办任务
+    const agentTasks = await getAgentTasks(targetAgent.id);
+    systemPrompt = injectTaskContext(systemPrompt, agentTasks);
+    
     const messages: any[] = [
-      { role: 'system', content: systemPromptWithProject }
+      { role: 'system', content: systemPrompt }
     ];
     
     // 添加历史消息

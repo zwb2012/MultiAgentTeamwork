@@ -669,3 +669,60 @@ PRD文档包含：
     agent_type: 'llm'
   }
 ];
+
+// ==================== 智能体任务队列 ====================
+
+// 智能体任务类型
+export type AgentTaskType = 'ticket' | 'conversation' | 'pipeline' | 'mention';
+
+// 智能体任务状态
+export type AgentTaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+// 智能体任务
+export interface AgentTask {
+  id: string;
+  agent_id: string;              // 分配给的智能体
+  task_type: AgentTaskType;      // 任务类型
+  reference_id: string;          // 关联ID（工单ID/会话ID等）
+  title: string;                 // 任务标题
+  description?: string;          // 任务描述
+  priority?: TicketPriority;     // 优先级
+  status: AgentTaskStatus;       // 任务状态
+  metadata?: Record<string, any>;// 扩展信息
+  assigned_at: string;           // 分配时间
+  due_date?: string;             // 截止时间
+  completed_at?: string;         // 完成时间
+  created_at: string;
+  updated_at?: string;
+}
+
+// 智能体任务摘要
+export interface AgentTaskSummary {
+  total: number;
+  pending: number;
+  in_progress: number;
+  by_priority: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  by_type: {
+    ticket: number;
+    conversation: number;
+    pipeline: number;
+    mention: number;
+  };
+}
+
+// 创建智能体任务请求
+export interface CreateAgentTaskRequest {
+  agent_id: string;
+  task_type: AgentTaskType;
+  reference_id: string;
+  title: string;
+  description?: string;
+  priority?: TicketPriority;
+  due_date?: string;
+  metadata?: Record<string, any>;
+}
