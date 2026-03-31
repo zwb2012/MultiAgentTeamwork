@@ -393,8 +393,12 @@ export const projects = pgTable(
     sync_error: text("sync_error"), // 同步失败错误信息
     last_commit_sha: varchar("last_commit_sha", { length: 64 }), // 最后同步的commit SHA
     
-    // 本地存储路径
-    local_path: varchar("local_path", { length: 512 }), // 克隆到本地的路径
+    // 本地存储路径配置（支持多平台）
+    // 格式: { windows: "D:\\projects\\xxx", linux: "/home/projects/xxx", macos: "/Users/projects/xxx", default: "/tmp/projects/xxx" }
+    local_path_config: jsonb("local_path_config"),
+    
+    // 实际使用的本地路径（运行时确定）
+    local_path: varchar("local_path", { length: 512 }),
     
     // 项目配置
     config: jsonb("config"), // { build_command, test_command, deploy_command }

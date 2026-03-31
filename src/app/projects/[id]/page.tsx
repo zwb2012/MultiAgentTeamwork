@@ -22,10 +22,13 @@ import {
   EyeOff,
   Loader2,
   RefreshCw,
-  Save
+  Save,
+  Monitor,
+  Folder
 } from 'lucide-react';
-import type { Project } from '@/types/project';
-import { SYNC_INTERVAL_OPTIONS, SYNC_STATUS_CONFIG } from '@/types/project';
+import type { Project, LocalPathConfig } from '@/types/project';
+import { SYNC_STATUS_CONFIG, SYNC_INTERVAL_OPTIONS, PLATFORM_CONFIG } from '@/types/project';
+import { LocalPathConfigInput } from '../components/local-path-config';
 
 export default function EditProjectPage() {
   const router = useRouter();
@@ -45,7 +48,8 @@ export default function EditProjectPage() {
     git_branch: 'main',
     git_token: '',
     sync_enabled: true,
-    sync_interval: 300
+    sync_interval: 300,
+    local_path_config: {} as LocalPathConfig
   });
 
   useEffect(() => {
@@ -68,7 +72,8 @@ export default function EditProjectPage() {
           git_branch: data.git_branch,
           git_token: '', // 不显示已保存的token
           sync_enabled: data.sync_enabled,
-          sync_interval: data.sync_interval
+          sync_interval: data.sync_interval,
+          local_path_config: data.local_path_config || {}
         });
       } else {
         alert('项目不存在');
@@ -96,7 +101,8 @@ export default function EditProjectPage() {
         git_url: formData.git_url,
         git_branch: formData.git_branch,
         sync_enabled: formData.sync_enabled,
-        sync_interval: formData.sync_interval
+        sync_interval: formData.sync_interval,
+        local_path_config: formData.local_path_config
       };
       
       // 只有输入了新token才更新
@@ -349,6 +355,24 @@ export default function EditProjectPage() {
                     </Select>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Folder className="h-5 w-5" />
+                  本地路径配置
+                </CardTitle>
+                <CardDescription>
+                  为不同平台配置本地存储路径
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LocalPathConfigInput
+                  value={formData.local_path_config || {}}
+                  onChange={(config) => setFormData({ ...formData, local_path_config: config })}
+                />
               </CardContent>
             </Card>
           </div>

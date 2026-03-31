@@ -30,6 +30,21 @@ export interface ProjectConfig {
   [key: string]: any;
 }
 
+// 本地路径配置（支持多平台）
+export interface LocalPathConfig {
+  // Windows 路径
+  windows?: string;  // 例如: D:\projects\my-project
+  
+  // Linux 路径
+  linux?: string;    // 例如: /home/projects/my-project
+  
+  // macOS 路径
+  macos?: string;    // 例如: /Users/dev/projects/my-project
+  
+  // 默认路径（当当前平台未配置时使用）
+  default?: string;  // 例如: /tmp/projects/my-project
+}
+
 // 项目
 export interface Project {
   id: string;
@@ -54,7 +69,10 @@ export interface Project {
   sync_error?: string;
   last_commit_sha?: string;
   
-  // 本地存储路径
+  // 本地存储路径配置（支持多平台）
+  local_path_config?: LocalPathConfig;
+  
+  // 实际使用的本地路径（运行时确定）
   local_path?: string;
   
   // 项目配置
@@ -106,6 +124,7 @@ export interface CreateProjectRequest {
   git_token?: string;
   sync_enabled?: boolean;
   sync_interval?: number;
+  local_path_config?: LocalPathConfig;
   config?: ProjectConfig;
 }
 
@@ -118,6 +137,7 @@ export interface UpdateProjectRequest {
   git_token?: string;
   sync_enabled?: boolean;
   sync_interval?: number;
+  local_path_config?: LocalPathConfig;
   config?: ProjectConfig;
   is_active?: boolean;
 }
@@ -140,4 +160,26 @@ export const SYNC_STATUS_CONFIG: Record<SyncStatus, { label: string; color: stri
   syncing: { label: '同步中', color: 'text-blue-600', bgColor: 'bg-blue-100' },
   success: { label: '同步成功', color: 'text-green-600', bgColor: 'bg-green-100' },
   failed: { label: '同步失败', color: 'text-red-600', bgColor: 'bg-red-100' },
+};
+
+// 平台类型
+export type Platform = 'windows' | 'linux' | 'macos';
+
+// 平台显示配置
+export const PLATFORM_CONFIG: Record<Platform, { label: string; placeholder: string; example: string }> = {
+  windows: { 
+    label: 'Windows', 
+    placeholder: 'D:\\projects\\my-project',
+    example: '例如: D:\\projects\\my-project'
+  },
+  linux: { 
+    label: 'Linux', 
+    placeholder: '/home/projects/my-project',
+    example: '例如: /home/projects/my-project'
+  },
+  macos: { 
+    label: 'macOS', 
+    placeholder: '/Users/dev/projects/my-project',
+    example: '例如: /Users/dev/projects/my-project'
+  }
 };

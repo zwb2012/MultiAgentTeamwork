@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import type { Project, UpdateProjectRequest } from '@/types/project';
+import type { Project, UpdateProjectRequest, LocalPathConfig } from '@/types/project';
 import { encrypt, decrypt } from '@/lib/encryption';
+import os from 'os';
 
 // GET /api/projects/[id] - 获取单个项目
 export async function GET(
@@ -64,6 +65,7 @@ export async function PUT(
       git_token,
       sync_enabled,
       sync_interval,
+      local_path_config,
       config,
       is_active 
     } = body;
@@ -116,6 +118,20 @@ export async function PUT(
     }
     if (config !== undefined) updateData.config = config;
     if (is_active !== undefined) updateData.is_active = is_active;
+    
+    // 处理本地路径配置
+    if (local_path_config !== undefined) {
+      updateData.local_path_config = local_path_config;
+      // 重新解析本地路径
+      const { data: currentProject } = await client
+        .from('projects')
+        .select('name')
+        .eq('id', projectId)
+        .single();
+      
+      const actualPath = resolveLocalPath(local_path_config, currentProject?.name);
+      updateData.local_path = actualPath;
+    }
     
     updateData.updated_at = new Date();
     
@@ -190,4 +206,34 @@ function isValidGitUrl(url: string): boolean {
   const sshPattern = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(\.git)?$/;
   
   return httpsPattern.test(url) || sshPattern.test(url);
+}
+
+// 根据当前平台解析本地路径
+function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): string {
+  const platform = os.platform();
+  let platformKey: 'windows' | 'linux' | 'macos' | 'default';
+  
+  if (platform === 'win32') {
+    platformKey = 'windows';
+  } else if (platform === 'darwin') {
+    platformKey = 'macos';
+  } else {
+    platformKey = 'linux';
+  }
+  
+  if (pathConfig) {
+    const platformPath = pathConfig[platformKey];
+    if (platformPath) {
+      return platformPath;
+    }
+    
+    if (pathConfig.default) {
+      return pathConfig.default;
+    }
+  }
+  
+  const baseDir = process.env.PROJECTS_DIR || '/tmp/projects';
+  const projectDir = projectName ? `${baseDir}/${projectName.replace(/[^a-zA-Z0-9-_]/g, '_')}` : baseDir;
+  
+  return projectDir;
 }

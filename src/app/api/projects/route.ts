@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import type { Project, CreateProjectRequest } from '@/types/project';
+import type { Project, CreateProjectRequest, LocalPathConfig } from '@/types/project';
 import { encrypt, decrypt } from '@/lib/encryption';
+import os from 'os';
 
 // GET /api/projects - 获取所有项目
 export async function GET(request: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
       git_token,
       sync_enabled,
       sync_interval,
+      local_path_config,
       config 
     } = body;
     
@@ -105,6 +107,15 @@ export async function POST(request: NextRequest) {
       insertData.config = config;
     }
     
+    // 处理本地路径配置
+    if (local_path_config) {
+      insertData.local_path_config = local_path_config;
+    }
+    
+    // 根据当前平台确定实际的本地路径
+    const actualPath = resolveLocalPath(local_path_config, name);
+    insertData.local_path = actualPath;
+    
     const { data, error } = await client
       .from('projects')
       .insert(insertData)
@@ -141,4 +152,38 @@ function isValidGitUrl(url: string): boolean {
   const sshPattern = /^git@[\w.-]+:[\w.-]+\/[\w.-]+(\.git)?$/;
   
   return httpsPattern.test(url) || sshPattern.test(url);
+}
+
+// 根据当前平台解析本地路径
+function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): string {
+  // 获取当前平台
+  const platform = os.platform();
+  let platformKey: 'windows' | 'linux' | 'macos' | 'default';
+  
+  if (platform === 'win32') {
+    platformKey = 'windows';
+  } else if (platform === 'darwin') {
+    platformKey = 'macos';
+  } else {
+    platformKey = 'linux';
+  }
+  
+  // 尝试获取平台特定路径
+  if (pathConfig) {
+    const platformPath = pathConfig[platformKey];
+    if (platformPath) {
+      return platformPath;
+    }
+    
+    // 尝试默认路径
+    if (pathConfig.default) {
+      return pathConfig.default;
+    }
+  }
+  
+  // 使用系统默认路径
+  const baseDir = process.env.PROJECTS_DIR || '/tmp/projects';
+  const projectDir = projectName ? `${baseDir}/${projectName.replace(/[^a-zA-Z0-9-_]/g, '_')}` : baseDir;
+  
+  return projectDir;
 }

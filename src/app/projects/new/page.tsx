@@ -18,9 +18,12 @@ import {
   Key,
   Eye,
   EyeOff,
-  Loader2
+  Loader2,
+  Monitor
 } from 'lucide-react';
 import { SYNC_INTERVAL_OPTIONS } from '@/types/project';
+import { LocalPathConfigInput } from '../components/local-path-config';
+import type { LocalPathConfig } from '@/types/project';
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -34,7 +37,8 @@ export default function NewProjectPage() {
     git_branch: 'main',
     git_token: '',
     sync_enabled: true,
-    sync_interval: 300
+    sync_interval: 300,
+    local_path_config: {} as LocalPathConfig
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -180,6 +184,13 @@ export default function NewProjectPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 本地路径配置 */}
+        <LocalPathConfigInput
+          value={formData.local_path_config}
+          onChange={(config) => setFormData({ ...formData, local_path_config: config })}
+          projectName={formData.name}
+        />
 
         <Card className="mt-6">
           <CardHeader>
