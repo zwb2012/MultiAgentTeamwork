@@ -265,6 +265,43 @@ export default function AgentsPage() {
     }
   };
 
+  // 健康检查
+  const handleHealthCheck = async (agentId: string) => {
+    try {
+      const response = await fetch(`/api/agents/${agentId}/health-check`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        fetchAgents();
+      } else {
+        alert('健康检查失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('健康检查失败:', error);
+      alert('健康检查失败');
+    }
+  };
+
+  // 在线状态显示
+  const getOnlineBadge = (onlineStatus: string) => {
+    const statusMap: Record<string, { label: string; color: string; icon: any }> = {
+      online: { label: '在线', color: 'bg-green-500', icon: null },
+      offline: { label: '离线', color: 'bg-red-500', icon: null },
+      checking: { label: '检测中', color: 'bg-yellow-500', icon: null },
+      unknown: { label: '未检测', color: 'bg-gray-400', icon: null }
+    };
+    const config = statusMap[onlineStatus] || statusMap.unknown;
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs ${config.color}`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+        {config.label}
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
       idle: { label: '空闲', variant: 'secondary' },
@@ -656,15 +693,29 @@ export default function AgentsPage() {
                   <div className="flex-1">
                     <CardTitle className="text-lg">{agent.name}</CardTitle>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {getOnlineBadge(agent.online_status || 'unknown')}
                       {getTypeBadge(agent.agent_type)}
                       {getRoleBadge(agent.role)}
-                      {getStatusBadge(agent.status)}
                     </div>
                   </div>
                   <Bot className="h-8 w-8 text-muted-foreground" />
                 </div>
               </CardHeader>
               <CardContent>
+                {/* 健康检查结果 */}
+                {agent.health_check_result && (
+                  <div className={`text-xs p-2 rounded mb-3 ${
+                    agent.health_check_result.online 
+                      ? 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300' 
+                      : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'
+                  }`}>
+                    {agent.health_check_result.message}
+                    {agent.health_check_result.latency && (
+                      <span className="ml-2 opacity-70">({agent.health_check_result.latency}ms)</span>
+                    )}
+                  </div>
+                )}
+                
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                   {agent.system_prompt.substring(0, 100)}...
                 </p>
@@ -683,44 +734,15 @@ export default function AgentsPage() {
                   </span>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  {agent.status === 'idle' && (
-                    <Button 
-                      size="sm" 
-                      variant="default"
-                      onClick={() => handleUpdateStatus(agent.id, 'working')}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      启动
-                    </Button>
-                  )}
-                  {agent.status === 'working' && (
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => handleUpdateStatus(agent.id, 'paused')}
-                    >
-                      <Pause className="h-3 w-3 mr-1" />
-                      暂停
-                    </Button>
-                  )}
-                  {agent.status === 'paused' && (
-                    <Button 
-                      size="sm" 
-                      variant="default"
-                      onClick={() => handleUpdateStatus(agent.id, 'working')}
-                    >
-                      <Play className="h-3 w-3 mr-1" />
-                      继续
-                    </Button>
-                  )}
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button 
                     size="sm" 
                     variant="outline"
-                    onClick={() => handleUpdateStatus(agent.id, 'idle')}
+                    onClick={() => handleHealthCheck(agent.id)}
+                    disabled={agent.online_status === 'checking'}
                   >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    重置
+                    <RefreshCw className={`h-3 w-3 mr-1 ${agent.online_status === 'checking' ? 'animate-spin' : ''}`} />
+                    检测连接
                   </Button>
                   <Button 
                     size="sm" 

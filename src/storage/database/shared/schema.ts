@@ -20,9 +20,17 @@ export const agents = pgTable(
     // 进程配置 (当 agent_type = process 时使用)
     process_config: jsonb("process_config"), // { command, args, env, cwd, platform }
     
-    // 状态管理
+    // 新状态管理
+    online_status: varchar("online_status", { length: 20 }).default("unknown"), // online, offline, checking, unknown
+    work_status: varchar("work_status", { length: 20 }).default("idle"), // idle, working, error
+    
+    // 兼容旧版本
     status: varchar("status", { length: 20 }).notNull().default("idle"), // idle, working, paused, error
     process_pid: integer("process_pid"), // 进程PID (当 agent_type = process 时)
+    
+    // 健康检查
+    last_health_check: timestamp("last_health_check", { withTimezone: true }),
+    health_check_result: jsonb("health_check_result"), // { online, message, latency, checked_at }
     
     // 其他配置
     config: jsonb("config"), // 其他通用配置
@@ -33,6 +41,7 @@ export const agents = pgTable(
   (table) => [
     index("agents_role_idx").on(table.role),
     index("agents_status_idx").on(table.status),
+    index("agents_online_status_idx").on(table.online_status),
     index("agents_is_active_idx").on(table.is_active),
     index("agents_agent_type_idx").on(table.agent_type),
   ]

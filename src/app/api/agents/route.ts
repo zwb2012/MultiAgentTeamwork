@@ -96,6 +96,10 @@ export async function POST(request: NextRequest) {
       role: role as AgentRole,
       system_prompt: finalSystemPrompt,
       agent_type: agent_type as AgentType,
+      // 新状态系统
+      online_status: 'unknown',
+      work_status: 'idle',
+      // 兼容旧版本
       status: 'idle' as AgentStatus,
       is_active: true
     };

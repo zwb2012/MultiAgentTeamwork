@@ -12,8 +12,14 @@ export type AgentRole =
   | 'pm'             // 产品经理
   | 'custom'         // 自定义
 
-// 智能体状态
-export type AgentStatus = 'idle' | 'working' | 'paused' | 'error'
+// 在线状态 - 表示智能体是否可用
+export type OnlineStatus = 'online' | 'offline' | 'checking' | 'unknown';
+
+// 工作状态 - 表示智能体当前在做什么
+export type WorkStatus = 'idle' | 'working' | 'error';
+
+// 智能体状态（兼容旧版本）
+export type AgentStatus = WorkStatus | 'paused';
 
 // 大模型配置
 export interface ModelConfig {
@@ -44,6 +50,14 @@ export interface AgentConfig {
   timeout?: number;
 }
 
+// 健康检查结果
+export interface HealthCheckResult {
+  online: boolean;
+  message?: string;
+  latency?: number;  // 响应延迟(ms)
+  checked_at?: string;
+}
+
 // 智能体
 export interface Agent {
   id: string;
@@ -62,9 +76,17 @@ export interface Agent {
   process_config?: ProcessConfig;
   process_pid?: number;
   
-  // 状态
+  // 状态（新）
+  online_status: OnlineStatus;     // 在线状态
+  work_status: WorkStatus;         // 工作状态
+  
+  // 状态（兼容旧版本）
   status: AgentStatus;
   is_active: boolean;
+  
+  // 健康检查信息
+  last_health_check?: string;      // 上次检查时间
+  health_check_result?: HealthCheckResult;
   
   // 其他配置
   config?: AgentConfig;
