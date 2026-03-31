@@ -13,7 +13,8 @@ import {
   Settings,
   Activity,
   Users,
-  GitBranch
+  GitBranch,
+  FolderGit2
 } from 'lucide-react';
 
 interface AgentStats {
@@ -93,6 +94,14 @@ export default function HomePage() {
       icon: GitBranch,
       href: '/pipelines',
       color: 'text-cyan-500',
+      badge: null
+    },
+    {
+      title: '项目管理',
+      description: '管理Git项目仓库，配置自动同步',
+      icon: FolderGit2,
+      href: '/projects',
+      color: 'text-indigo-500',
       badge: null
     }
   ];
