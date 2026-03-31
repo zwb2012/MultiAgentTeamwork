@@ -93,11 +93,17 @@ export default function TicketsPage() {
       return;
     }
 
+    // 获取负责人名称
+    const assignee = agents.find(a => a.id === createFormData.assignee_id);
+
     try {
       const response = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(createFormData)
+        body: JSON.stringify({
+          ...createFormData,
+          assignee_name: assignee?.name
+        })
       });
       
       const result = await response.json();
@@ -124,6 +130,9 @@ export default function TicketsPage() {
   const handleFlowTicket = async () => {
     if (!selectedTicket) return;
     
+    // 获取负责人名称
+    const assignee = agents.find(a => a.id === flowData.assignee_id);
+    
     try {
       const response = await fetch(`/api/tickets/${selectedTicket.id}`, {
         method: 'PUT',
@@ -131,8 +140,8 @@ export default function TicketsPage() {
         body: JSON.stringify({
           status: flowData.status,
           assignee_id: flowData.assignee_id,
-          comment: flowData.comment,
-          operator_id: agents[0]?.id
+          assignee_name: assignee?.name,
+          comment: flowData.comment
         })
       });
       

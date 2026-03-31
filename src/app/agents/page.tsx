@@ -108,6 +108,16 @@ export default function AgentsPage() {
     }
   };
 
+  // 打开创建对话框时自动选择第一个角色模板
+  useEffect(() => {
+    if (isCreateDialogOpen) {
+      const template = AGENT_ROLE_TEMPLATES[0];
+      if (template && !formData.name) {
+        handleRoleSelect(template.role);
+      }
+    }
+  }, [isCreateDialogOpen]);
+
   const handleRoleSelect = (role: AgentRole) => {
     setSelectedRole(role);
     const template = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
