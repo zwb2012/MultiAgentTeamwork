@@ -54,11 +54,19 @@ export const conversations = pgTable(
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
+    
+    // 会话类型: lobby(大厅), private(私聊), group(群组), pipeline(流水线专属)
+    type: varchar("type", { length: 20 }).notNull().default("private"),
+    
+    // 会话配置
+    config: jsonb("config"), // { is_public, pipeline_run_id, auto_notify, allow_invite }
+    
     status: varchar("status", { length: 20 }).notNull().default("active"), // active, archived, completed
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
+    index("conversations_type_idx").on(table.type),
     index("conversations_status_idx").on(table.status),
     index("conversations_created_at_idx").on(table.created_at),
   ]
@@ -87,13 +95,18 @@ export const messages = pgTable(
     conversation_id: varchar("conversation_id", { length: 36 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
     agent_id: varchar("agent_id", { length: 36 }).references(() => agents.id, { onDelete: "set null" }),
     role: varchar("role", { length: 20 }).notNull(), // system, user, assistant
+    
+    // 消息类型
+    message_type: varchar("message_type", { length: 20 }).default("text"), // text, system, task_start, task_complete, task_failed, notification, node_transfer
+    
     content: text("content").notNull(),
-    metadata: jsonb("metadata"), // 额外信息: tokens, model等
+    metadata: jsonb("metadata"), // 额外信息: tokens, model, node_id, transfer_from, transfer_to等
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("messages_conversation_id_idx").on(table.conversation_id),
     index("messages_agent_id_idx").on(table.agent_id),
+    index("messages_message_type_idx").on(table.message_type),
     index("messages_created_at_idx").on(table.created_at),
   ]
 );
@@ -212,7 +225,7 @@ export const pipeline_nodes = pgTable(
     // 节点基本信息
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
-    node_type: varchar("node_type", { length: 20 }).notNull(), // agent, task, condition, parallel, delay
+    node_type: varchar("node_type", { length: 20 }).notNull(), // agent, task, gateway, condition, delay, start, end
     
     // 执行顺序
     order_index: integer("order_index").notNull().default(0), // 执行顺序
@@ -225,6 +238,15 @@ export const pipeline_nodes = pgTable(
     execution_mode: varchar("execution_mode", { length: 20 }).notNull().default("sequential"), // sequential, parallel
     parallel_group: varchar("parallel_group", { length: 50 }), // 并行组标识，同组节点并行执行
     
+    // 网关配置（当 node_type === 'gateway' 时使用）
+    gateway_type: varchar("gateway_type", { length: 20 }), // parallel_split, parallel_join, exclusive, inclusive
+    
+    // 汇聚配置（当 gateway_type === 'parallel_join' 时使用）
+    merge_strategy: varchar("merge_strategy", { length: 20 }).default("all"), // all, any, custom
+    upstream_nodes: jsonb("upstream_nodes"), // 上游节点ID列表 ["node_id_1", "node_id_2"]
+    downstream_nodes: jsonb("downstream_nodes"), // 下游节点ID列表
+    custom_condition: text("custom_condition"), // 自定义条件表达式
+    
     // 执行条件
     condition: jsonb("condition"), // 条件表达式
     
@@ -236,6 +258,9 @@ export const pipeline_nodes = pgTable(
     input_config: jsonb("input_config"), // 输入参数映射
     output_config: jsonb("output_config"), // 输出参数映射
     
+    // 可视化位置
+    position: jsonb("position"), // { x: number, y: number }
+    
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },
@@ -245,6 +270,8 @@ export const pipeline_nodes = pgTable(
     index("pipeline_nodes_task_id_idx").on(table.task_id),
     index("pipeline_nodes_order_idx").on(table.order_index),
     index("pipeline_nodes_parallel_group_idx").on(table.parallel_group),
+    index("pipeline_nodes_node_type_idx").on(table.node_type),
+    index("pipeline_nodes_gateway_type_idx").on(table.gateway_type),
   ]
 );
 
@@ -258,6 +285,9 @@ export const pipeline_runs = pgTable(
     // 运行状态
     status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, running, success, failed, cancelled
     current_node_id: varchar("current_node_id", { length: 36 }).references(() => pipeline_nodes.id, { onDelete: "set null" }),
+    
+    // 关联会话（群组协作）
+    conversation_id: varchar("conversation_id", { length: 36 }).references(() => conversations.id, { onDelete: "set null" }),
     
     // 运行配置
     trigger_by: varchar("trigger_by", { length: 20 }).default("manual"), // manual, scheduled, webhook
@@ -284,6 +314,7 @@ export const pipeline_runs = pgTable(
     index("pipeline_runs_pipeline_id_idx").on(table.pipeline_id),
     index("pipeline_runs_status_idx").on(table.status),
     index("pipeline_runs_current_node_idx").on(table.current_node_id),
+    index("pipeline_runs_conversation_id_idx").on(table.conversation_id),
     index("pipeline_runs_created_at_idx").on(table.created_at),
   ]
 );
@@ -297,7 +328,10 @@ export const pipeline_node_runs = pgTable(
     node_id: varchar("node_id", { length: 36 }).notNull().references(() => pipeline_nodes.id, { onDelete: "cascade" }),
     
     // 执行状态
-    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, running, success, failed, skipped
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, waiting, running, success, failed, skipped
+    
+    // 等待状态详情（当状态为 waiting 时使用）
+    wait_status: jsonb("wait_status"), // { required_nodes: [], completed_nodes: [], merge_strategy: 'all' }
     
     // 执行结果
     input_data: jsonb("input_data"),
