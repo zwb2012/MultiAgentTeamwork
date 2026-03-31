@@ -28,6 +28,66 @@ export type GatewayType =
   | 'exclusive'       // 排他网关（条件分支）
   | 'inclusive';      // 包容网关
 
+// 条件类型
+export type ConditionType = 
+  | 'expression'    // 表达式求值
+  | 'output_match'  // 输出匹配
+  | 'script';       // 自定义脚本
+
+// 循环配置
+export interface LoopConfig {
+  // 是否为循环边
+  isLoop: boolean;
+  
+  // 循环条件（表达式）
+  loopCondition?: string; // 例如: "{{output.bugs.length}} > 0"
+  
+  // 最大循环次数
+  maxIterations: number; // 默认: 10
+  
+  // 循环数据映射（每次循环携带的数据）
+  carryOver?: string[]; // 例如: ["bugs", "testReport"]
+  
+  // 循环提示词（发送给循环目标节点的额外提示）
+  loopPrompt?: string;
+}
+
+// 条件分支配置
+export interface ConditionBranch {
+  // 分支ID
+  id: string;
+  
+  // 分支名称
+  label: string;
+  
+  // 条件值（当表达式结果等于此值时走此分支）
+  conditionValue: any;
+  
+  // 目标节点ID
+  targetNodeId: string;
+  
+  // 是否为循环分支
+  isLoop: boolean;
+  
+  // 循环配置（当 isLoop 为 true 时）
+  loopConfig?: LoopConfig;
+}
+
+// 条件网关配置
+export interface ConditionConfig {
+  // 条件类型
+  conditionType: ConditionType;
+  
+  // 条件表达式
+  expression: string; // 例如: "{{output.status}} === 'passed'"
+  
+  // 分支配置列表
+  branches: ConditionBranch[];
+  
+  // 默认分支ID（当所有条件都不满足时）
+  defaultBranchId?: string;
+}
+
 // 执行模式
 export type ExecutionMode = 'sequential' | 'parallel';
 
@@ -122,10 +182,23 @@ export interface PipelineNode {
   custom_condition?: string; // 自定义条件表达式
   
   // 条件配置（当 node_type === 'condition' 时）
+  condition_config?: ConditionConfig;
+  
+  // 条件配置（旧版，保持兼容）
   condition?: {
     expression: string;
     true_node_id?: string;
     false_node_id?: string;
+  };
+  
+  // 额外配置
+  config?: {
+    parallelType?: 'split' | 'join';
+    
+    // 任务分发配置
+    outputMappings?: OutputMapping[];
+    
+    [key: string]: any;
   };
   
   // 重试和超时
@@ -138,16 +211,6 @@ export interface PipelineNode {
   
   // 可视化位置
   position?: NodePosition;
-  
-  // 额外配置
-  config?: {
-    parallelType?: 'split' | 'join'; // 并行网关类型
-    
-    // 任务分发配置（当节点有多个下游时使用）
-    outputMappings?: OutputMapping[];
-    
-    [key: string]: any;
-  };
   
   // 时间戳
   created_at: string;
@@ -275,6 +338,19 @@ export interface Pipeline {
   
   // 节点列表（关联查询）
   nodes?: PipelineNode[];
+  
+  // 边列表（可视化连接）
+  edges?: Array<{
+    id?: string;
+    source: string;
+    target: string;
+    data?: {
+      label?: string;
+      condition?: string;
+      isLoop?: boolean;
+      loopConfig?: LoopConfig;
+    };
+  }>;
   
   // 最后运行信息
   last_run?: PipelineRun;

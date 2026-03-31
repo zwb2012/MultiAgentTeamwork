@@ -6,6 +6,7 @@ import {
   Play, 
   Save, 
   ArrowLeft,
+  ArrowRight,
   Bot,
   GitBranch,
   Clock,
@@ -64,6 +65,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { OutputMappingConfig } from './output-mapping-config';
+import { ConditionConfigPanel } from './condition-config-panel';
 import type { 
   Pipeline, 
   PipelineNode, 
@@ -99,6 +101,8 @@ const CustomNode = ({ data, id, selected }: { data: any; id: string; selected?: 
         return <Bot className="h-5 w-5 text-blue-500" />;
       case 'parallel':
         return <GitBranch className="h-5 w-5 text-purple-500" />;
+      case 'condition':
+        return <ArrowRight className="h-5 w-5 text-orange-500" />;
       case 'delay':
         return <Clock className="h-5 w-5 text-gray-500" />;
       default:
@@ -116,6 +120,8 @@ const CustomNode = ({ data, id, selected }: { data: any; id: string; selected?: 
         return 'border-blue-400 bg-blue-50';
       case 'parallel':
         return 'border-purple-400 bg-purple-50';
+      case 'condition':
+        return 'border-orange-400 bg-orange-50';
       case 'delay':
         return 'border-gray-400 bg-gray-50';
       default:
@@ -192,6 +198,13 @@ const NODE_TEMPLATES = [
     icon: GitBranch,
     description: '等待多个上游节点完成后继续',
     color: 'text-purple-500'
+  },
+  {
+    type: 'condition' as NodeType,
+    name: '条件网关',
+    icon: ArrowRight,
+    description: '根据条件决定流程走向，支持循环',
+    color: 'text-orange-500'
   },
   {
     type: 'delay' as NodeType,
@@ -687,6 +700,7 @@ function PipelineEditorContent() {
                   <SelectItem value="start">开始</SelectItem>
                   <SelectItem value="agent">智能体</SelectItem>
                   <SelectItem value="parallel">并行网关</SelectItem>
+                  <SelectItem value="condition">条件网关</SelectItem>
                   <SelectItem value="delay">延迟</SelectItem>
                   <SelectItem value="end">结束</SelectItem>
                 </SelectContent>
@@ -814,6 +828,30 @@ function PipelineEditorContent() {
                   </div>
                 )}
               </>
+            )}
+
+            {/* 条件网关配置 */}
+            {nodeForm.node_type === 'condition' && (
+              <ConditionConfigPanel
+                nodeId={selectedNodeId || ''}
+                config={pipeline.nodes?.find(n => n.id === selectedNodeId)?.condition_config}
+                downstreamNodes={edges
+                  .filter(e => e.source === selectedNodeId)
+                  .map(e => {
+                    const node = nodes.find(n => n.id === e.target);
+                    return { id: e.target, name: node?.data?.label || '未命名' };
+                  })}
+                onConfigChange={(config) => {
+                  setPipeline(prev => ({
+                    ...prev,
+                    nodes: prev.nodes?.map(n => 
+                      n.id === selectedNodeId 
+                        ? { ...n, condition_config: config }
+                        : n
+                    )
+                  }));
+                }}
+              />
             )}
 
             {/* 延迟节点配置 */}
