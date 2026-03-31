@@ -162,6 +162,171 @@ export interface TicketHistory {
   created_at: string;
 }
 
+// ==================== 流水线相关类型 ====================
+
+// 流水线触发类型
+export type PipelineTriggerType = 'manual' | 'scheduled' | 'webhook';
+
+// 流水线状态
+export type PipelineStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+// 节点类型
+export type PipelineNodeType = 'agent' | 'task' | 'condition' | 'parallel' | 'delay';
+
+// 执行模式
+export type ExecutionMode = 'sequential' | 'parallel';
+
+// 流水线运行状态
+export type PipelineRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+
+// 节点运行状态
+export type NodeRunStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
+
+// 流水线触发配置
+export interface PipelineTriggerConfig {
+  schedule?: string; // cron表达式
+  webhook_url?: string;
+  webhook_secret?: string;
+}
+
+// 流水线配置
+export interface PipelineConfig {
+  timeout?: number; // 超时时间(秒)
+  retry_policy?: {
+    max_retries: number;
+    retry_delay: number; // 重试延迟(毫秒)
+  };
+  notification?: {
+    on_success?: boolean;
+    on_failure?: boolean;
+    channels?: string[]; // 通知渠道
+  };
+}
+
+// 流水线
+export interface Pipeline {
+  id: string;
+  name: string;
+  description?: string;
+  trigger_type: PipelineTriggerType;
+  trigger_config?: PipelineTriggerConfig;
+  config?: PipelineConfig;
+  status: PipelineStatus;
+  is_active: boolean;
+  created_at: string;
+  updated_at?: string;
+}
+
+// 节点条件
+export interface NodeCondition {
+  type: 'expression' | 'output_match';
+  expression?: string;
+  expected_output?: string;
+}
+
+// 节点输入输出配置
+export interface NodeIOConfig {
+  mapping?: Record<string, string>; // 参数映射
+  default?: Record<string, any>; // 默认值
+}
+
+// 流水线节点
+export interface PipelineNode {
+  id: string;
+  pipeline_id: string;
+  name: string;
+  description?: string;
+  node_type: PipelineNodeType;
+  order_index: number;
+  agent_id?: string;
+  task_id?: string;
+  execution_mode: ExecutionMode;
+  parallel_group?: string;
+  condition?: NodeCondition;
+  retry_count: number;
+  timeout_seconds?: number;
+  input_config?: NodeIOConfig;
+  output_config?: NodeIOConfig;
+  created_at: string;
+  updated_at?: string;
+}
+
+// 节点运行日志
+export interface NodeRunLog {
+  node_id: string;
+  node_name: string;
+  status: NodeRunStatus;
+  start_time?: string;
+  end_time?: string;
+  output?: any;
+  error?: string;
+}
+
+// 流水线运行
+export interface PipelineRun {
+  id: string;
+  pipeline_id: string;
+  status: PipelineRunStatus;
+  current_node_id?: string;
+  trigger_by: PipelineTriggerType;
+  trigger_user?: string;
+  total_nodes: number;
+  completed_nodes: number;
+  failed_nodes: number;
+  logs?: NodeRunLog[];
+  input_data?: Record<string, any>;
+  output_data?: Record<string, any>;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+}
+
+// 流水线节点运行
+export interface PipelineNodeRun {
+  id: string;
+  pipeline_run_id: string;
+  node_id: string;
+  status: NodeRunStatus;
+  input_data?: Record<string, any>;
+  output_data?: Record<string, any>;
+  error_message?: string;
+  retry_count: number;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+}
+
+// 创建流水线请求
+export interface CreatePipelineRequest {
+  name: string;
+  description?: string;
+  trigger_type?: PipelineTriggerType;
+  trigger_config?: PipelineTriggerConfig;
+  config?: PipelineConfig;
+}
+
+// 创建流水线节点请求
+export interface CreatePipelineNodeRequest {
+  name: string;
+  description?: string;
+  node_type: PipelineNodeType;
+  order_index?: number;
+  agent_id?: string;
+  task_id?: string;
+  execution_mode?: ExecutionMode;
+  parallel_group?: string;
+  condition?: NodeCondition;
+  retry_count?: number;
+  timeout_seconds?: number;
+  input_config?: NodeIOConfig;
+  output_config?: NodeIOConfig;
+}
+
+// 运行流水线请求
+export interface RunPipelineRequest {
+  input_data?: Record<string, any>;
+}
+
 // 预设角色模板
 export interface AgentRoleTemplate {
   role: AgentRole;

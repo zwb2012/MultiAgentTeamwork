@@ -12,7 +12,8 @@ import {
   Ticket, 
   Settings,
   Activity,
-  Users
+  Users,
+  GitBranch
 } from 'lucide-react';
 
 interface AgentStats {
@@ -84,6 +85,14 @@ export default function HomePage() {
       icon: Ticket,
       href: '/tickets',
       color: 'text-orange-500',
+      badge: null
+    },
+    {
+      title: '流水线管理',
+      description: '自定义流水线，配置串行/并行执行',
+      icon: GitBranch,
+      href: '/pipelines',
+      color: 'text-cyan-500',
       badge: null
     }
   ];

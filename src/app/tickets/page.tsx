@@ -10,7 +10,6 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -22,6 +21,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Ticket as TicketIcon, 
   Plus,
@@ -29,9 +29,10 @@ import {
   Lightbulb,
   Wrench,
   ArrowRight,
-  User
+  User,
+  ListTodo
 } from 'lucide-react';
-import type { Ticket, Agent, TicketStatus, TicketType, TicketPriority } from '@/types/agent';
+import type { Ticket, Agent, TicketType, TicketPriority } from '@/types/agent';
 
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -43,6 +44,15 @@ export default function TicketsPage() {
     status: '',
     assignee_id: '',
     comment: ''
+  });
+  
+  // 创建工单表单
+  const [createFormData, setCreateFormData] = useState({
+    type: 'bug' as TicketType,
+    title: '',
+    description: '',
+    priority: 'medium' as TicketPriority,
+    assignee_id: ''
   });
 
   useEffect(() => {
@@ -76,6 +86,41 @@ export default function TicketsPage() {
     }
   };
 
+  // 创建工单
+  const handleCreateTicket = async () => {
+    if (!createFormData.title) {
+      alert('请输入工单标题');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createFormData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setIsCreateDialogOpen(false);
+        setCreateFormData({
+          type: 'bug',
+          title: '',
+          description: '',
+          priority: 'medium',
+          assignee_id: ''
+        });
+        fetchTickets();
+      } else {
+        alert('创建失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('创建工单失败:', error);
+      alert('创建失败');
+    }
+  };
+
   const handleFlowTicket = async () => {
     if (!selectedTicket) return;
     
@@ -87,7 +132,7 @@ export default function TicketsPage() {
           status: flowData.status,
           assignee_id: flowData.assignee_id,
           comment: flowData.comment,
-          operator_id: agents[0]?.id // 简化: 使用第一个智能体作为操作者
+          operator_id: agents[0]?.id
         })
       });
       
@@ -214,12 +259,127 @@ export default function TicketsPage() {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <TicketIcon className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">暂无工单</p>
+                <p className="text-muted-foreground mb-4">暂无工单</p>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  创建第一个工单
+                </Button>
               </CardContent>
             </Card>
           )}
         </div>
       </main>
+
+      {/* 创建工单对话框 */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>创建工单</DialogTitle>
+            <DialogDescription>
+              创建新的Bug单或工单
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label>工单类型 *</Label>
+              <Select 
+                value={createFormData.type} 
+                onValueChange={(value: TicketType) => setCreateFormData({ ...createFormData, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bug">
+                    <div className="flex items-center gap-2">
+                      <Bug className="h-4 w-4" />
+                      Bug修复
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="feature">
+                    <div className="flex items-center gap-2">
+                      <Lightbulb className="h-4 w-4" />
+                      新功能
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="improvement">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-4 w-4" />
+                      改进优化
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>标题 *</Label>
+              <Input
+                value={createFormData.title}
+                onChange={(e) => setCreateFormData({ ...createFormData, title: e.target.value })}
+                placeholder="输入工单标题"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>描述</Label>
+              <Textarea
+                value={createFormData.description}
+                onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
+                placeholder="详细描述问题或需求"
+                rows={4}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>优先级</Label>
+              <Select 
+                value={createFormData.priority} 
+                onValueChange={(value: TicketPriority) => setCreateFormData({ ...createFormData, priority: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">低</SelectItem>
+                  <SelectItem value="medium">中</SelectItem>
+                  <SelectItem value="high">高</SelectItem>
+                  <SelectItem value="critical">紧急</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>指派给</Label>
+              <Select 
+                value={createFormData.assignee_id} 
+                onValueChange={(value) => setCreateFormData({ ...createFormData, assignee_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择负责人" />
+                </SelectTrigger>
+                <SelectContent>
+                  {agents.map(agent => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name} ({agent.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleCreateTicket}>
+              创建工单
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 流转对话框 */}
       <Dialog open={isFlowDialogOpen} onOpenChange={setIsFlowDialogOpen}>

@@ -162,6 +162,154 @@ export const ticket_history = pgTable(
   ]
 );
 
+// ==================== 流水线相关表 ====================
+
+// 流水线表
+export const pipelines = pgTable(
+  "pipelines",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    
+    // 流水线配置
+    trigger_type: varchar("trigger_type", { length: 20 }).default("manual"), // manual, scheduled, webhook
+    trigger_config: jsonb("trigger_config"), // 定时任务或webhook配置
+    
+    // 全局配置
+    config: jsonb("config"), // { timeout, retry_policy, notification }
+    
+    // 状态
+    status: varchar("status", { length: 20 }).notNull().default("draft"), // draft, active, paused, archived
+    is_active: boolean("is_active").default(true).notNull(),
+    
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("pipelines_status_idx").on(table.status),
+    index("pipelines_is_active_idx").on(table.is_active),
+    index("pipelines_created_at_idx").on(table.created_at),
+  ]
+);
+
+// 流水线节点表
+export const pipeline_nodes = pgTable(
+  "pipeline_nodes",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    pipeline_id: varchar("pipeline_id", { length: 36 }).notNull().references(() => pipelines.id, { onDelete: "cascade" }),
+    
+    // 节点基本信息
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    node_type: varchar("node_type", { length: 20 }).notNull(), // agent, task, condition, parallel, delay
+    
+    // 执行顺序
+    order_index: integer("order_index").notNull().default(0), // 执行顺序
+    
+    // 节点配置
+    agent_id: varchar("agent_id", { length: 36 }).references(() => agents.id, { onDelete: "set null" }),
+    task_id: varchar("task_id", { length: 36 }).references(() => tasks.id, { onDelete: "set null" }),
+    
+    // 执行模式
+    execution_mode: varchar("execution_mode", { length: 20 }).notNull().default("sequential"), // sequential, parallel
+    parallel_group: varchar("parallel_group", { length: 50 }), // 并行组标识，同组节点并行执行
+    
+    // 执行条件
+    condition: jsonb("condition"), // 条件表达式
+    
+    // 重试和超时
+    retry_count: integer("retry_count").default(0),
+    timeout_seconds: integer("timeout_seconds"),
+    
+    // 输入输出配置
+    input_config: jsonb("input_config"), // 输入参数映射
+    output_config: jsonb("output_config"), // 输出参数映射
+    
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("pipeline_nodes_pipeline_id_idx").on(table.pipeline_id),
+    index("pipeline_nodes_agent_id_idx").on(table.agent_id),
+    index("pipeline_nodes_task_id_idx").on(table.task_id),
+    index("pipeline_nodes_order_idx").on(table.order_index),
+    index("pipeline_nodes_parallel_group_idx").on(table.parallel_group),
+  ]
+);
+
+// 流水线运行记录表
+export const pipeline_runs = pgTable(
+  "pipeline_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    pipeline_id: varchar("pipeline_id", { length: 36 }).notNull().references(() => pipelines.id, { onDelete: "cascade" }),
+    
+    // 运行状态
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, running, success, failed, cancelled
+    current_node_id: varchar("current_node_id", { length: 36 }).references(() => pipeline_nodes.id, { onDelete: "set null" }),
+    
+    // 运行配置
+    trigger_by: varchar("trigger_by", { length: 20 }).default("manual"), // manual, scheduled, webhook
+    trigger_user: varchar("trigger_user", { length: 36 }), // 触发用户
+    
+    // 执行结果
+    total_nodes: integer("total_nodes").default(0),
+    completed_nodes: integer("completed_nodes").default(0),
+    failed_nodes: integer("failed_nodes").default(0),
+    
+    // 运行日志
+    logs: jsonb("logs"), // [{ node_id, status, start_time, end_time, output, error }]
+    
+    // 输入输出
+    input_data: jsonb("input_data"), // 运行输入
+    output_data: jsonb("output_data"), // 最终输出
+    
+    // 时间记录
+    started_at: timestamp("started_at", { withTimezone: true }),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("pipeline_runs_pipeline_id_idx").on(table.pipeline_id),
+    index("pipeline_runs_status_idx").on(table.status),
+    index("pipeline_runs_current_node_idx").on(table.current_node_id),
+    index("pipeline_runs_created_at_idx").on(table.created_at),
+  ]
+);
+
+// 流水线节点执行记录表
+export const pipeline_node_runs = pgTable(
+  "pipeline_node_runs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    pipeline_run_id: varchar("pipeline_run_id", { length: 36 }).notNull().references(() => pipeline_runs.id, { onDelete: "cascade" }),
+    node_id: varchar("node_id", { length: 36 }).notNull().references(() => pipeline_nodes.id, { onDelete: "cascade" }),
+    
+    // 执行状态
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, running, success, failed, skipped
+    
+    // 执行结果
+    input_data: jsonb("input_data"),
+    output_data: jsonb("output_data"),
+    error_message: text("error_message"),
+    
+    // 重试信息
+    retry_count: integer("retry_count").default(0),
+    
+    // 时间记录
+    started_at: timestamp("started_at", { withTimezone: true }),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("pipeline_node_runs_run_id_idx").on(table.pipeline_run_id),
+    index("pipeline_node_runs_node_id_idx").on(table.node_id),
+    index("pipeline_node_runs_status_idx").on(table.status),
+  ]
+);
+
 // 保留系统表
 export const healthCheck = pgTable("health_check", {
   id: serial().notNull(),
