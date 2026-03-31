@@ -1,6 +1,45 @@
-# projects
+# 多AI Agent协同工作平台
 
-这是一个基于 [Next.js 16](https://nextjs.org) + [shadcn/ui](https://ui.shadcn.com) 的全栈应用项目，由扣子编程 CLI 创建。
+一个基于 Next.js 16 + shadcn/ui 的多AI智能体协同工作平台,支持智能体创建、多智能体交互、任务管理和工单流转。
+
+## 功能特性
+
+### 1. 智能体管理
+- 创建和配置AI智能体
+- 预设角色模板(开发工程师、测试工程师、代码审核员、架构师等)
+- 自定义系统提示词和模型配置
+- 智能体状态管理(空闲、工作中、已暂停)
+
+### 2. 多智能体协作
+- 创建会话,邀请多个智能体参与
+- 实时流式对话交互
+- 历史消息记录
+- 多智能体并行工作
+
+### 3. 任务报告
+- 任务创建和分配
+- 任务进度跟踪
+- 任务报告生成和展示
+- 任务状态管理
+
+### 4. 工单流转
+- Bug单和工单创建
+- 工单状态流转(待处理→处理中→已解决→已关闭)
+- 工单分配和负责人管理
+- 流转历史记录
+
+## 协作流程示例
+
+```
+开发工程师 → 编写代码 → 代码审核员 → 审核通过 → 测试工程师 → 功能测试
+      ↑                                                              ↓
+      ←←←←←←←←←←←← 发现Bug ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
+```
+
+1. **开发工程师**接收任务,编写代码并提交审核
+2. **代码审核员**检查代码质量,通过后流转到测试
+3. **测试工程师**进行功能测试,发现问题创建Bug单
+4. **开发工程师**修复Bug,流转到审核和测试进行验证
 
 ## 快速开始
 
@@ -343,9 +382,127 @@ export const useStore = create<Store>((set) => ({
 - **样式**: Tailwind CSS v4
 - **表单**: React Hook Form + Zod
 - **图标**: Lucide React
-- **字体**: Geist Sans & Geist Mono
+- **AI集成**: coze-coding-dev-sdk (支持流式输出)
+- **数据库**: Supabase (PostgreSQL)
+- **ORM**: Drizzle
 - **包管理器**: pnpm 9+
 - **TypeScript**: 5.x
+
+## 项目结构
+
+```
+src/
+├── app/                      # Next.js App Router 目录
+│   ├── agents/              # 智能体管理页面
+│   ├── conversations/       # 多智能体协作页面
+│   ├── tasks/               # 任务报告页面
+│   ├── tickets/             # 工单流转页面
+│   ├── api/                 # API 路由
+│   │   ├── agents/         # 智能体API
+│   │   ├── conversations/  # 会话API
+│   │   ├── messages/       # 消息API
+│   │   ├── chat/           # LLM对话API
+│   │   ├── tasks/          # 任务API
+│   │   └── tickets/        # 工单API
+│   └── page.tsx             # 首页
+├── components/              # React 组件目录
+│   └── ui/                  # shadcn/ui 基础组件
+├── types/                   # TypeScript类型定义
+│   └── agent.ts            # 智能体相关类型
+└── storage/                # 数据存储
+    └── database/           # 数据库配置
+        ├── shared/         # 共享模块
+        │   └── schema.ts   # 数据库Schema
+        └── supabase-client.ts # Supabase客户端
+```
+
+## 数据模型
+
+### 核心表结构
+
+1. **agents** - 智能体表
+   - 存储智能体配置、角色、提示词
+   - 状态管理(空闲/工作中/已暂停)
+
+2. **conversations** - 会话表
+   - 多智能体协作会话
+   - 会话状态管理
+
+3. **messages** - 消息表
+   - 对话消息记录
+   - 支持多角色消息
+
+4. **tasks** - 任务表
+   - 任务分配和进度跟踪
+   - 任务报告存储
+
+5. **tickets** - 工单表
+   - Bug单和工单管理
+   - 工单状态流转
+
+6. **ticket_history** - 工单流转历史
+   - 记录所有流转操作
+   - 支持审计追溯
+
+## 使用指南
+
+### 1. 创建智能体
+
+访问 `/agents` 页面:
+- 选择预设角色模板或自定义角色
+- 配置系统提示词和模型参数
+- 设置温度(temperature)等参数
+
+### 2. 启动协作会话
+
+访问 `/conversations` 页面:
+- 创建新会话
+- 选择参与的智能体
+- 开始多智能体对话
+
+### 3. 查看任务报告
+
+访问 `/tasks` 页面:
+- 查看任务列表和进度
+- 查看任务报告详情
+
+### 4. 管理工单
+
+访问 `/tickets` 页面:
+- 创建Bug单或工单
+- 流转工单状态
+- 分配负责人
+
+## API接口
+
+### 智能体管理
+- `GET /api/agents` - 获取智能体列表
+- `POST /api/agents` - 创建智能体
+- `PUT /api/agents/[id]` - 更新智能体
+- `DELETE /api/agents/[id]` - 删除智能体
+
+### 会话管理
+- `GET /api/conversations` - 获取会话列表
+- `POST /api/conversations` - 创建会话
+
+### 消息管理
+- `GET /api/messages` - 获取消息列表
+- `POST /api/messages` - 发送消息
+
+### LLM对话
+- `POST /api/chat` - AI对话(流式输出)
+
+### 任务管理
+- `GET /api/tasks` - 获取任务列表
+- `POST /api/tasks` - 创建任务
+- `PUT /api/tasks/[id]` - 更新任务
+
+### 工单管理
+- `GET /api/tickets` - 获取工单列表
+- `POST /api/tickets` - 创建工单
+- `PUT /api/tickets/[id]` - 流转工单
+
+## 环境要求
 
 ## 参考文档
 
