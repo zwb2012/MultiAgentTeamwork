@@ -53,6 +53,20 @@ export default function AgentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<AgentRole>('developer');
   
+  // 全局配置
+  const [globalConfig, setGlobalConfig] = useState<{
+    has_api_key: boolean;
+    default_base_url: string;
+    default_model: string;
+  }>({
+    has_api_key: false,
+    default_base_url: 'https://api.coze.cn',
+    default_model: 'doubao-seed-1-8-251228'
+  });
+  
+  // 是否使用自定义配置
+  const [useCustomConfig, setUseCustomConfig] = useState(false);
+  
   // 表单数据
   const [formData, setFormData] = useState<{
     name: string;
@@ -93,7 +107,25 @@ export default function AgentsPage() {
 
   useEffect(() => {
     fetchAgents();
+    fetchGlobalConfig();
   }, []);
+
+  const fetchGlobalConfig = async () => {
+    try {
+      const response = await fetch('/api/config');
+      const result = await response.json();
+      
+      if (result.success) {
+        setGlobalConfig({
+          has_api_key: !!result.data.llm.default_api_key,
+          default_base_url: result.data.llm.default_base_url,
+          default_model: result.data.llm.default_model
+        });
+      }
+    } catch (error) {
+      console.error('获取全局配置失败:', error);
+    }
+  };
 
   const fetchAgents = async () => {
     try {
@@ -141,9 +173,23 @@ export default function AgentsPage() {
       return;
     }
     
-    if (formData.agent_type === 'llm' && !formData.model) {
-      alert('请选择大模型');
-      return;
+    if (formData.agent_type === 'llm') {
+      // LLM类型验证
+      if (!formData.model) {
+        alert('请选择大模型');
+        return;
+      }
+      
+      // 检查API配置
+      if (!useCustomConfig && !globalConfig.has_api_key) {
+        alert('请先在全局设置中配置默认API Key，或在此处使用自定义配置');
+        return;
+      }
+      
+      if (useCustomConfig && !customApiKey) {
+        alert('使用自定义配置时，API Key 必填');
+        return;
+      }
     }
     
     if (formData.agent_type === 'process' && !processCommand) {
@@ -163,11 +209,19 @@ export default function AgentsPage() {
         submitData.model = formData.model;
         submitData.model_config = { ...formData.model_config };
         
-        // 自定义模型配置
+        // 处理API配置
+        if (useCustomConfig) {
+          // 使用自定义配置
+          submitData.model_config.api_key = customApiKey;
+          if (customModelUrl) {
+            submitData.model_config.base_url = customModelUrl;
+          }
+        }
+        // 否则留空，使用全局配置
+        
+        // 处理自定义模型
         if (formData.model === 'custom') {
           submitData.model = 'custom';
-          submitData.model_config.base_url = customModelUrl;
-          submitData.model_config.api_key = customApiKey;
         }
       }
       
@@ -397,6 +451,76 @@ export default function AgentsPage() {
                 {/* LLM配置 */}
                 {formData.agent_type === 'llm' && (
                   <>
+                    {/* API配置选择 */}
+                    <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label className="font-medium">API 配置</Label>
+                          <p className="text-xs text-muted-foreground">
+                            {globalConfig.has_api_key 
+                              ? '全局配置已设置，可直接使用或覆盖'
+                              : '请先配置全局API Key，或使用自定义配置'}
+                          </p>
+                        </div>
+                        {globalConfig.has_api_key && (
+                          <Badge variant="outline" className="bg-green-50 text-green-700">
+                            全局配置可用
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={useCustomConfig}
+                          onCheckedChange={setUseCustomConfig}
+                        />
+                        <Label className="text-sm">使用自定义API配置</Label>
+                      </div>
+                      
+                      {!useCustomConfig && globalConfig.has_api_key && (
+                        <div className="text-xs text-muted-foreground p-2 bg-green-50 dark:bg-green-950 rounded">
+                          将使用全局配置的 API Key 和 Base URL
+                        </div>
+                      )}
+                      
+                      {!useCustomConfig && !globalConfig.has_api_key && (
+                        <div className="text-xs text-red-600 p-2 bg-red-50 dark:bg-red-950 rounded">
+                          未配置全局 API Key，请先在 
+                          <a href="/settings" className="underline">全局设置</a> 
+                          中配置，或启用自定义配置
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 自定义API配置 */}
+                    {useCustomConfig && (
+                      <div className="space-y-4 p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <Key className="h-4 w-4" />
+                          自定义 API 配置
+                        </h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>API Key *</Label>
+                            <Input
+                              type="password"
+                              value={customApiKey}
+                              onChange={(e) => setCustomApiKey(e.target.value)}
+                              placeholder="sk-xxx"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Base URL</Label>
+                            <Input
+                              value={customModelUrl}
+                              onChange={(e) => setCustomModelUrl(e.target.value)}
+                              placeholder="https://api.coze.cn"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 选择大模型 */}
                     <div className="space-y-2">
                       <Label className="flex items-center gap-2">

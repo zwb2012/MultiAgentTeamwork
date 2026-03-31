@@ -107,6 +107,12 @@ export default function HomePage() {
             <h1 className="text-xl font-bold">多AI Agent协同工作平台</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Link href="/settings">
+              <Button variant="ghost" size="sm">
+                <Settings className="h-4 w-4 mr-2" />
+                全局设置
+              </Button>
+            </Link>
             <Badge variant="outline" className="gap-1">
               <Activity className="h-3 w-3" />
               {stats.working} 个智能体工作中
