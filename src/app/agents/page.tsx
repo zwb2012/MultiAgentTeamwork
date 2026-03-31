@@ -45,7 +45,9 @@ import {
   type AgentRole, 
   type AgentType,
   type ModelConfig,
-  type ProcessConfig 
+  type ProcessConfig,
+  type CapabilityTag,
+  CAPABILITY_TAG_CONFIG
 } from '@/types/agent';
 
 export default function AgentsPage() {
@@ -78,6 +80,8 @@ export default function AgentsPage() {
     model_config: ModelConfig;
     // 进程配置
     process_config: ProcessConfig;
+    // 能力标签
+    capability_tags: CapabilityTag[];
   }>({
     name: '',
     role: 'developer',
@@ -95,7 +99,8 @@ export default function AgentsPage() {
       env: {},
       platform: 'auto',
       auto_restart: false
-    }
+    },
+    capability_tags: []
   });
 
   // 自定义模型配置
@@ -234,6 +239,11 @@ export default function AgentsPage() {
           auto_restart: formData.process_config.auto_restart
         };
       }
+      
+      // 添加能力标签
+      if (formData.capability_tags.length > 0) {
+        submitData.capability_tags = formData.capability_tags;
+      }
 
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -274,7 +284,8 @@ export default function AgentsPage() {
         env: {},
         platform: 'auto',
         auto_restart: false
-      }
+      },
+      capability_tags: []
     });
     setCustomModelUrl('');
     setCustomApiKey('');
@@ -719,6 +730,53 @@ export default function AgentsPage() {
                     </div>
                   </div>
                 )}
+
+                <Separator />
+
+                {/* 能力标签配置 */}
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold">能力标签</Label>
+                  <p className="text-sm text-muted-foreground">
+                    选择智能体擅长的领域，用于流水线任务分发
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {(Object.keys(CAPABILITY_TAG_CONFIG) as CapabilityTag[]).map(tag => {
+                      const config = CAPABILITY_TAG_CONFIG[tag];
+                      const isSelected = formData.capability_tags.includes(tag);
+                      return (
+                        <Badge
+                          key={tag}
+                          variant={isSelected ? "default" : "outline"}
+                          className={`cursor-pointer transition-all ${
+                            isSelected 
+                              ? `${config.color} text-white` 
+                              : 'hover:bg-muted'
+                          }`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setFormData({
+                                ...formData,
+                                capability_tags: formData.capability_tags.filter(t => t !== tag)
+                              });
+                            } else {
+                              setFormData({
+                                ...formData,
+                                capability_tags: [...formData.capability_tags, tag]
+                              });
+                            }
+                          }}
+                        >
+                          {config.label}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  {formData.capability_tags.length > 0 && (
+                    <div className="text-xs text-muted-foreground">
+                      已选择: {formData.capability_tags.map(t => CAPABILITY_TAG_CONFIG[t].label).join('、')}
+                    </div>
+                  )}
+                </div>
 
                 <Separator />
 

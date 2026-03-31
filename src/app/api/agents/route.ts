@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import type { Agent, AgentRole, AgentStatus, AgentType, ModelConfig, ProcessConfig } from '@/types/agent';
+import type { Agent, AgentRole, AgentStatus, AgentType, ModelConfig, ProcessConfig, CapabilityTag } from '@/types/agent';
 
 // GET /api/agents - 获取所有智能体
 export async function GET(request: NextRequest) {
@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       model, 
       model_config,
       process_config,
-      config 
+      config,
+      capability_tags 
     } = body;
     
     // 参数校验
@@ -120,6 +121,11 @@ export async function POST(request: NextRequest) {
     // 其他配置
     if (config) {
       insertData.config = config;
+    }
+    
+    // 能力标签
+    if (capability_tags && Array.isArray(capability_tags)) {
+      insertData.capability_tags = capability_tags as CapabilityTag[];
     }
     
     const { data, error } = await client

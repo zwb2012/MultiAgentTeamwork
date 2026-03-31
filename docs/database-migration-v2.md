@@ -28,6 +28,10 @@
 **pipeline_node_runs 表新增字段：**
 - `wait_status` (jsonb): 等待状态详情
 
+### 6. 智能体能力标签
+**agents 表新增字段：**
+- `capability_tags` (jsonb): 能力标签数组 ["frontend", "backend", "testing", "review", "architecture", "general"]
+
 ---
 
 ## 迁移SQL
@@ -88,6 +92,27 @@ UPDATE agents SET
   online_status = 'unknown',
   work_status = 'idle'
 WHERE online_status IS NULL;
+
+-- ============================================
+-- 3.1 智能体能力标签（新增）
+-- ============================================
+
+-- 添加能力标签字段
+ALTER TABLE agents 
+ADD COLUMN IF NOT EXISTS capability_tags jsonb;
+
+-- 为已有智能体根据角色设置默认能力标签
+UPDATE agents SET capability_tags = 
+  CASE 
+    WHEN role = 'frontend_dev' THEN '["frontend"]'::jsonb
+    WHEN role = 'backend_dev' THEN '["backend"]'::jsonb
+    WHEN role = 'tester' THEN '["testing"]'::jsonb
+    WHEN role = 'reviewer' THEN '["review"]'::jsonb
+    WHEN role = 'architect' THEN '["architecture"]'::jsonb
+    WHEN role = 'developer' THEN '["frontend", "backend"]'::jsonb
+    ELSE '["general"]'::jsonb
+  END
+WHERE capability_tags IS NULL;
 
 -- ============================================
 -- 4. 流水线节点汇聚配置
@@ -211,7 +236,7 @@ WHERE table_name = 'pipeline_node_runs'
 SELECT column_name, data_type 
 FROM information_schema.columns 
 WHERE table_name = 'agents' 
-  AND column_name IN ('online_status', 'work_status', 'last_health_check', 'health_check_result');
+  AND column_name IN ('online_status', 'work_status', 'last_health_check', 'health_check_result', 'capability_tags');
 ```
 
 ---
@@ -243,3 +268,12 @@ WHERE table_name = 'agents'
 - `all`: 所有上游节点完成（默认）
 - `any`: 任一上游节点完成
 - `custom`: 自定义条件
+
+### 5. 能力标签
+智能体的能力标签用于流水线任务分发匹配：
+- `frontend`: 前端开发能力
+- `backend`: 后端开发能力
+- `testing`: 测试能力
+- `review`: 代码审核能力
+- `architecture`: 架构设计能力
+- `general`: 通用能力

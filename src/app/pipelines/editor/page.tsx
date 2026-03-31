@@ -63,11 +63,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { OutputMappingConfig } from './output-mapping-config';
 import type { 
   Pipeline, 
   PipelineNode, 
   NodeType,
-  MergeStrategy 
+  MergeStrategy,
+  OutputMapping
 } from '@/types/pipeline';
 
 // ============================================
@@ -168,6 +170,7 @@ const nodeTypes: NodeTypes = {
 };
 
 // 简化的节点模板
+// 注意：并行分叉不需要单独的节点，直接从一个节点连多条线出去就是并行
 const NODE_TEMPLATES = [
   {
     type: 'start' as NodeType,
@@ -185,9 +188,9 @@ const NODE_TEMPLATES = [
   },
   {
     type: 'parallel' as NodeType,
-    name: '并行网关',
+    name: '汇聚网关',
     icon: GitBranch,
-    description: '分叉/汇聚多条执行线',
+    description: '等待多个上游节点完成后继续',
     color: 'text-purple-500'
   },
   {
@@ -718,6 +721,33 @@ function PipelineEditorContent() {
                     )}
                   </SelectContent>
                 </Select>
+                
+                {/* 输出映射配置 - 当节点有多个下游时显示 */}
+                {nodeForm.agent_id && (
+                  <OutputMappingConfig
+                    nodeId={selectedNodeId || ''}
+                    agentId={nodeForm.agent_id}
+                    edges={edges}
+                    nodes={nodes}
+                    agents={agents}
+                    onConfigChange={(mappings) => {
+                      setPipeline(prev => ({
+                        ...prev,
+                        nodes: prev.nodes?.map(n => 
+                          n.id === selectedNodeId 
+                            ? { 
+                                ...n, 
+                                config: { 
+                                  ...n.config, 
+                                  outputMappings: mappings 
+                                } 
+                              }
+                            : n
+                        )
+                      }));
+                    }}
+                  />
+                )}
               </div>
             )}
 

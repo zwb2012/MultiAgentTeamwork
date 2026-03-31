@@ -37,6 +37,53 @@ export type MergeStrategy =
   | 'any'     // 任一上游节点完成
   | 'custom'; // 自定义条件
 
+// 任务类型（用于任务分发匹配）
+export type TaskType = 
+  | 'frontend'   // 前端任务
+  | 'backend'    // 后端任务
+  | 'testing'    // 测试任务
+  | 'review'     // 代码审核
+  | 'architecture' // 架构设计
+  | 'general';   // 通用任务
+
+// 任务类型标签
+export const TASK_TYPE_LABELS: Record<TaskType, string> = {
+  frontend: '前端开发',
+  backend: '后端开发',
+  testing: '测试',
+  review: '代码审核',
+  architecture: '架构设计',
+  general: '通用'
+};
+
+// 任务类型颜色
+export const TASK_TYPE_COLORS: Record<TaskType, string> = {
+  frontend: 'bg-blue-500',
+  backend: 'bg-green-500',
+  testing: 'bg-yellow-500',
+  review: 'bg-purple-500',
+  architecture: 'bg-indigo-500',
+  general: 'bg-gray-500'
+};
+
+// 节点输出映射（任务分发配置）
+export interface OutputMapping {
+  // 目标节点ID
+  targetNodeId: string;
+  
+  // 任务类型标签
+  taskType: TaskType;
+  
+  // 发送给下游的消息模板
+  template?: string;
+  
+  // 输出数据提取字段
+  extractFields?: string[];
+  
+  // 条件判断
+  condition?: string;
+}
+
 // 节点位置（可视化用）
 export interface NodePosition {
   x: number;
@@ -95,6 +142,10 @@ export interface PipelineNode {
   // 额外配置
   config?: {
     parallelType?: 'split' | 'join'; // 并行网关类型
+    
+    // 任务分发配置（当节点有多个下游时使用）
+    outputMappings?: OutputMapping[];
+    
     [key: string]: any;
   };
   

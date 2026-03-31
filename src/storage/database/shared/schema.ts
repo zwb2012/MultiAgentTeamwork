@@ -34,6 +34,10 @@ export const agents = pgTable(
     
     // 其他配置
     config: jsonb("config"), // 其他通用配置
+    
+    // 能力标签 - 用于任务分发匹配
+    capability_tags: jsonb("capability_tags"), // ["frontend", "backend", "testing", "review"]
+    
     is_active: boolean("is_active").default(true).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),

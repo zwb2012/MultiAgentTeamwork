@@ -50,6 +50,43 @@ export interface AgentConfig {
   timeout?: number;
 }
 
+// 能力标签类型 - 用于任务分发匹配
+export type CapabilityTag = 'frontend' | 'backend' | 'testing' | 'review' | 'architecture' | 'general';
+
+// 能力标签显示配置
+export const CAPABILITY_TAG_CONFIG: Record<CapabilityTag, { label: string; color: string; description: string }> = {
+  frontend: { 
+    label: '前端开发', 
+    color: 'bg-blue-500', 
+    description: '擅长React、Vue、TypeScript等前端技术' 
+  },
+  backend: { 
+    label: '后端开发', 
+    color: 'bg-green-500', 
+    description: '擅长Node.js、Python、数据库等后端技术' 
+  },
+  testing: { 
+    label: '测试', 
+    color: 'bg-yellow-500', 
+    description: '擅长功能测试、自动化测试、性能测试' 
+  },
+  review: { 
+    label: '代码审核', 
+    color: 'bg-purple-500', 
+    description: '擅长代码质量审核和最佳实践' 
+  },
+  architecture: { 
+    label: '架构设计', 
+    color: 'bg-indigo-500', 
+    description: '擅长系统架构设计和技术选型' 
+  },
+  general: { 
+    label: '通用', 
+    color: 'bg-gray-500', 
+    description: '可以处理各种通用任务' 
+  }
+};
+
 // 健康检查结果
 export interface HealthCheckResult {
   online: boolean;
@@ -90,6 +127,10 @@ export interface Agent {
   
   // 其他配置
   config?: AgentConfig;
+  
+  // 能力标签 - 用于任务分发匹配
+  capability_tags?: CapabilityTag[];
+  
   created_at: string;
   updated_at?: string;
 }
