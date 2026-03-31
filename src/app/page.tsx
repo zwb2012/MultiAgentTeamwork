@@ -2,235 +2,322 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { 
   Bot, 
   MessageSquare, 
-  ListTodo, 
   Ticket, 
-  Settings,
+  GitBranch,
   Activity,
   Users,
-  GitBranch,
-  FolderGit2
+  FolderGit2,
+  Wifi,
+  WifiOff,
+  HelpCircle,
+  Clock,
+  AlertCircle,
+  CheckCircle2,
+  Play,
+  Loader2
 } from 'lucide-react';
 
-interface AgentStats {
-  total: number;
-  idle: number;
-  working: number;
-  paused: number;
+interface DashboardStats {
+  agents: {
+    total: number;
+    online: number;
+    offline: number;
+    unknown: number;
+    idle: number;
+    working: number;
+    error: number;
+  };
+  projects: {
+    total: number;
+  };
+  conversations: {
+    total: number;
+  };
+  tickets: {
+    total: number;
+    open: number;
+    inProgress: number;
+  };
+  pipelines: {
+    total: number;
+  };
 }
 
 export default function HomePage() {
-  const [stats, setStats] = useState<AgentStats>({
-    total: 0,
-    idle: 0,
-    working: 0,
-    paused: 0
-  });
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAgentStats();
+    fetchStats();
+    // 每30秒刷新一次
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchAgentStats = async () => {
+  const fetchStats = async () => {
     try {
-      const response = await fetch('/api/agents');
+      const response = await fetch('/api/dashboard/stats');
       const result = await response.json();
       
-      if (result.success && result.data) {
-        const agents = result.data;
-        setStats({
-          total: agents.length,
-          idle: agents.filter((a: any) => a.status === 'idle').length,
-          working: agents.filter((a: any) => a.status === 'working').length,
-          paused: agents.filter((a: any) => a.status === 'paused').length
-        });
+      if (result.success) {
+        setStats(result.data);
       }
     } catch (error) {
-      console.error('获取智能体统计失败:', error);
+      console.error('获取统计数据失败:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const features = [
-    {
-      title: '智能体管理',
-      description: '创建、配置和管理AI智能体',
-      icon: Bot,
-      href: '/agents',
-      color: 'text-blue-500',
-      badge: `${stats.total} 个智能体`
-    },
-    {
-      title: '多智能体协作',
-      description: '启动会话，让多个智能体协同工作',
-      icon: MessageSquare,
-      href: '/conversations',
-      color: 'text-green-500',
-      badge: `${stats.working} 个工作中`
-    },
-    {
-      title: '任务报告',
-      description: '查看任务执行报告和进度',
-      icon: ListTodo,
-      href: '/tasks',
-      color: 'text-purple-500',
-      badge: null
-    },
-    {
-      title: '工单流转',
-      description: 'Bug单和工单的状态流转管理',
-      icon: Ticket,
-      href: '/tickets',
-      color: 'text-orange-500',
-      badge: null
-    },
-    {
-      title: '流水线管理',
-      description: '自定义流水线，配置串行/并行执行',
-      icon: GitBranch,
-      href: '/pipelines',
-      color: 'text-cyan-500',
-      badge: null
-    },
-    {
-      title: '项目管理',
-      description: '管理Git项目仓库，配置自动同步',
-      icon: FolderGit2,
-      href: '/projects',
-      color: 'text-indigo-500',
-      badge: null
-    }
-  ];
+  const getOnlineRate = () => {
+    if (!stats || stats.agents.total === 0) return 0;
+    return Math.round((stats.agents.online / stats.agents.total) * 100);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-4rem)]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted">
-      {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <Users className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold">多AI Agent协同工作平台</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link href="/settings">
-              <Button variant="ghost" size="sm">
-                <Settings className="h-4 w-4 mr-2" />
-                全局设置
-              </Button>
-            </Link>
-            <Badge variant="outline" className="gap-1">
-              <Activity className="h-3 w-3" />
-              {stats.working} 个智能体工作中
+    <div className="p-6 space-y-6">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">监控面板</h1>
+          <p className="text-muted-foreground mt-1">
+            实时监控智能体状态和系统运行情况
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="h-4 w-4" />
+          <span>最后更新: {new Date().toLocaleTimeString()}</span>
+        </div>
+      </div>
+
+      {/* 智能体状态概览 */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-primary" />
+              <CardTitle>智能体状态</CardTitle>
+            </div>
+            <Badge variant="outline">
+              共 {stats?.agents.total || 0} 个智能体
             </Badge>
           </div>
-        </div>
-      </header>
+          <CardDescription>
+            仅统计项目智能体和通用智能体，不包括模板
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-6 md:grid-cols-4">
+            {/* 在线状态 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Wifi className="h-4 w-4 text-green-500" />
+                在线
+              </div>
+              <div className="text-3xl font-bold text-green-500">
+                {stats?.agents.online || 0}
+              </div>
+              <Progress 
+                value={getOnlineRate()} 
+                className="h-2"
+              />
+              <div className="text-xs text-muted-foreground">
+                在线率 {getOnlineRate()}%
+              </div>
+            </div>
 
-      {/* Main Content */}
-      <main className="container px-4 py-8">
-        {/* Stats */}
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">总智能体数</CardTitle>
-              <Bot className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.total}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">空闲</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-500">{stats.idle}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">工作中</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-500">{stats.working}</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">已暂停</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-500">{stats.paused}</div>
-            </CardContent>
-          </Card>
-        </div>
+            {/* 离线状态 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <WifiOff className="h-4 w-4 text-red-500" />
+                离线
+              </div>
+              <div className="text-3xl font-bold text-red-500">
+                {stats?.agents.offline || 0}
+              </div>
+            </div>
 
-        {/* Features */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {features.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <Link key={feature.href} href={feature.href}>
-                <Card className="h-full transition-all hover:shadow-lg hover:border-primary/50 cursor-pointer">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <Icon className={`h-8 w-8 ${feature.color}`} />
-                      {feature.badge && (
-                        <Badge variant="secondary">{feature.badge}</Badge>
-                      )}
-                    </div>
-                    <CardTitle className="text-lg">{feature.title}</CardTitle>
-                    <CardDescription>{feature.description}</CardDescription>
-                  </CardHeader>
-                </Card>
-              </Link>
-            );
-          })}
-        </div>
+            {/* 未知状态 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <HelpCircle className="h-4 w-4 text-gray-500" />
+                未检测
+              </div>
+              <div className="text-3xl font-bold text-gray-500">
+                {stats?.agents.unknown || 0}
+              </div>
+            </div>
 
-        {/* Workflow Description */}
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>协同工作流程示例</CardTitle>
-            <CardDescription>
-              多个智能体可以协同完成复杂任务
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-4 text-sm">
-              <Badge>开发</Badge>
-              <div className="flex-1 border-l-2 border-primary pl-4">
-                开发工程师接收任务，编写代码并提交审核
+            {/* 工作中 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Play className="h-4 w-4 text-blue-500" />
+                工作中
+              </div>
+              <div className="text-3xl font-bold text-blue-500">
+                {stats?.agents.working || 0}
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <Badge variant="secondary">审核</Badge>
-              <div className="flex-1 border-l-2 border-primary pl-4">
-                代码审核员检查代码质量，通过后流转到测试
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 快速统计卡片 */}
+      <div className="grid gap-4 md:grid-cols-4">
+        {/* 项目 */}
+        <Link href="/projects">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">项目</CardTitle>
+              <FolderGit2 className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats?.projects.total || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                活跃项目
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* 会话 */}
+        <Link href="/conversations">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">会话</CardTitle>
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats?.conversations.total || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                活跃会话
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* 工单 */}
+        <Link href="/tickets">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">工单</CardTitle>
+              <Ticket className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats?.tickets.total || 0}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-xs">
+                  {stats?.tickets.open || 0} 待处理
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* 流水线 */}
+        <Link href="/pipelines">
+          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">流水线</CardTitle>
+              <GitBranch className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats?.pipelines.total || 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                已创建流水线
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 智能体详细状态 */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-primary" />
+            <CardTitle>工作状态分布</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="flex items-center gap-4 p-4 border rounded-lg">
+              <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats?.agents.idle || 0}</div>
+                <div className="text-sm text-muted-foreground">空闲</div>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <Badge variant="outline">测试</Badge>
-              <div className="flex-1 border-l-2 border-primary pl-4">
-                测试工程师进行功能测试和回归测试，发现问题创建Bug单
+
+            <div className="flex items-center gap-4 p-4 border rounded-lg">
+              <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                <Play className="h-6 w-6 text-blue-600" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats?.agents.working || 0}</div>
+                <div className="text-sm text-muted-foreground">工作中</div>
               </div>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <Badge variant="destructive">修复</Badge>
-              <div className="flex-1 border-l-2 border-primary pl-4">
-                开发工程师修复Bug，流转到审核和测试进行验证
+
+            <div className="flex items-center gap-4 p-4 border rounded-lg">
+              <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{stats?.agents.error || 0}</div>
+                <div className="text-sm text-muted-foreground">异常</div>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </main>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 快捷操作 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>快捷操作</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/agent-templates">
+              <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 py-1.5 px-3">
+                创建智能体模板
+              </Badge>
+            </Link>
+            <Link href="/project-agents">
+              <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 py-1.5 px-3">
+                查看项目智能体
+              </Badge>
+            </Link>
+            <Link href="/projects/new">
+              <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 py-1.5 px-3">
+                新建项目
+              </Badge>
+            </Link>
+            <Link href="/conversations">
+              <Badge variant="secondary" className="cursor-pointer hover:bg-secondary/80 py-1.5 px-3">
+                发起会话
+              </Badge>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

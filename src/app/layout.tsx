@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inspector } from 'react-dev-inspector';
 import './globals.css';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
 
 export const metadata: Metadata = {
   title: {
@@ -67,7 +68,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`antialiased`}>
         {isDev && <Inspector />}
-        {children}
+        <DashboardLayout>
+          {children}
+        </DashboardLayout>
       </body>
     </html>
   );

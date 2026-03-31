@@ -34,11 +34,14 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Conversation, ConversationType } from '@/types/conversation';
+import type { Project } from '@/types/project';
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -48,13 +51,28 @@ export default function ConversationsPage() {
   const [createForm, setCreateForm] = useState({
     title: '',
     type: 'group' as ConversationType,
+    project_id: '' as string | null,
     selectedAgents: [] as string[]
   });
 
   useEffect(() => {
     fetchConversations();
     fetchAgents();
+    fetchProjects();
   }, []);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('/api/projects');
+      const result = await response.json();
+      
+      if (result.success) {
+        setProjects(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取项目列表失败:', error);
+    }
+  };
 
   const fetchConversations = async () => {
     try {
@@ -73,7 +91,8 @@ export default function ConversationsPage() {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents');
+      // 只获取非模板智能体（项目智能体）
+      const response = await fetch('/api/agents?is_template=false');
       const result = await response.json();
       
       if (result.success) {
@@ -114,6 +133,7 @@ export default function ConversationsPage() {
         setCreateForm({
           title: '',
           type: 'group',
+          project_id: null,
           selectedAgents: []
         });
       } else {

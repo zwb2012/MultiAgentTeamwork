@@ -75,7 +75,8 @@ export default function TicketsPage() {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents');
+      // 只获取非模板智能体（项目智能体）
+      const response = await fetch('/api/agents?is_template=false');
       const result = await response.json();
       
       if (result.success) {
