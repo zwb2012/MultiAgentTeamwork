@@ -105,6 +105,11 @@ export interface Agent {
   // 智能体类型
   agent_type: AgentType;
   
+  // 项目关联
+  project_id?: string;        // 绑定项目，为空表示全局模板
+  is_template: boolean;       // 是否为模板
+  template_id?: string;       // 从哪个模板创建的
+  
   // 大模型配置
   model?: string;
   model_config?: ModelConfig;
@@ -134,6 +139,12 @@ export interface Agent {
   created_at: string;
   updated_at?: string;
 }
+
+// 智能体模板（继承Agent，强调模板特性）
+export type AgentTemplate = Omit<Agent, 'project_id' | 'is_template'> & {
+  is_template: true;
+  project_id?: null;
+};
 
 // 会话
 export interface Conversation {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,6 +55,7 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<AgentRole>('developer');
+  const [activeTab, setActiveTab] = useState<'all' | 'templates' | 'project'>('all');
   
   // 全局配置
   const [globalConfig, setGlobalConfig] = useState<{
@@ -75,6 +77,7 @@ export default function AgentsPage() {
     role: AgentRole;
     system_prompt: string;
     agent_type: AgentType;
+    is_template: boolean;
     // LLM配置
     model: string;
     model_config: ModelConfig;
@@ -87,6 +90,7 @@ export default function AgentsPage() {
     role: 'developer',
     system_prompt: '',
     agent_type: 'llm',
+    is_template: false,
     model: 'doubao-seed-1-8-251228',
     model_config: {
       temperature: 0.3,
@@ -134,7 +138,14 @@ export default function AgentsPage() {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents');
+      let url = '/api/agents';
+      if (activeTab === 'templates') {
+        url += '?is_template=true';
+      } else if (activeTab === 'project') {
+        url += '?is_template=false';
+      }
+      
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
@@ -144,6 +155,11 @@ export default function AgentsPage() {
       console.error('获取智能体列表失败:', error);
     }
   };
+
+  // 当Tab切换时重新获取数据
+  useEffect(() => {
+    fetchAgents();
+  }, [activeTab]);
 
   // 打开创建对话框时自动选择第一个角色模板
   useEffect(() => {
@@ -207,7 +223,8 @@ export default function AgentsPage() {
         name: formData.name,
         role: formData.role,
         system_prompt: formData.system_prompt,
-        agent_type: formData.agent_type
+        agent_type: formData.agent_type,
+        is_template: formData.is_template
       };
       
       if (formData.agent_type === 'llm') {
@@ -272,6 +289,7 @@ export default function AgentsPage() {
       role: 'developer',
       system_prompt: '',
       agent_type: 'llm',
+      is_template: false,
       model: 'doubao-seed-1-8-251228',
       model_config: {
         temperature: 0.3,
@@ -398,13 +416,24 @@ export default function AgentsPage() {
             <Bot className="h-6 w-6" />
             <h1 className="text-xl font-bold">智能体管理</h1>
           </div>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                创建智能体
-              </Button>
-            </DialogTrigger>
+          
+          {/* Tab 切换 */}
+          <div className="flex items-center gap-4">
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+              <TabsList>
+                <TabsTrigger value="all">全部</TabsTrigger>
+                <TabsTrigger value="templates">模板</TabsTrigger>
+                <TabsTrigger value="project">项目智能体</TabsTrigger>
+              </TabsList>
+            </Tabs>
+            
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  创建智能体
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>创建智能体</DialogTitle>
@@ -414,6 +443,20 @@ export default function AgentsPage() {
               </DialogHeader>
               
               <div className="space-y-6 mt-4">
+                {/* 模板开关 */}
+                <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
+                  <div className="space-y-0.5">
+                    <Label className="font-medium">保存为模板</Label>
+                    <p className="text-xs text-muted-foreground">
+                      模板可复用，为不同项目快速创建相同配置的智能体
+                    </p>
+                  </div>
+                  <Switch
+                    checked={formData.is_template}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_template: checked })}
+                  />
+                </div>
+                
                 {/* 智能体类型选择 */}
                 <div className="space-y-2">
                   <Label className="text-base font-semibold">智能体类型</Label>
@@ -847,6 +890,7 @@ export default function AgentsPage() {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
       </header>
 
@@ -873,12 +917,24 @@ export default function AgentsPage() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <CardTitle className="text-lg">{agent.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">{agent.name}</CardTitle>
+                      {agent.is_template && (
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          模板
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {getOnlineBadge(agent.online_status || 'unknown')}
                       {getTypeBadge(agent.agent_type)}
                       {getRoleBadge(agent.role)}
                     </div>
+                    {agent.project_id && (
+                      <div className="text-xs text-muted-foreground mt-2">
+                        所属项目: <Link href={`/projects/${agent.project_id}`} className="text-primary hover:underline">查看项目</Link>
+                      </div>
+                    )}
                   </div>
                   <Bot className="h-8 w-8 text-muted-foreground" />
                 </div>

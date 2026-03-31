@@ -13,6 +13,11 @@ export const agents = pgTable(
     // 智能体类型: llm(大模型) 或 process(本地进程)
     agent_type: varchar("agent_type", { length: 20 }).notNull().default("llm"),
     
+    // 项目关联 (为空表示全局模板)
+    project_id: varchar("project_id", { length: 36 }), // 关联项目
+    is_template: boolean("is_template").default(false).notNull(), // 是否为模板
+    template_id: varchar("template_id", { length: 36 }), // 从哪个模板创建的
+    
     // 大模型配置 (当 agent_type = llm 时使用)
     model: varchar("model", { length: 64 }).default("doubao-seed-1-8-251228"),
     model_config: jsonb("model_config"), // { api_key, base_url, temperature, thinking, caching, max_tokens }
@@ -48,6 +53,8 @@ export const agents = pgTable(
     index("agents_online_status_idx").on(table.online_status),
     index("agents_is_active_idx").on(table.is_active),
     index("agents_agent_type_idx").on(table.agent_type),
+    index("agents_project_id_idx").on(table.project_id),
+    index("agents_is_template_idx").on(table.is_template),
   ]
 );
 
@@ -58,6 +65,9 @@ export const conversations = pgTable(
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
+    
+    // 项目关联
+    project_id: varchar("project_id", { length: 36 }), // 绑定项目，实现项目维度隔离
     
     // 会话类型: lobby(大厅), private(私聊), group(群组), pipeline(流水线专属)
     type: varchar("type", { length: 20 }).notNull().default("private"),
@@ -73,6 +83,7 @@ export const conversations = pgTable(
     index("conversations_type_idx").on(table.type),
     index("conversations_status_idx").on(table.status),
     index("conversations_created_at_idx").on(table.created_at),
+    index("conversations_project_id_idx").on(table.project_id),
   ]
 );
 
@@ -122,6 +133,10 @@ export const tasks = pgTable(
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
     conversation_id: varchar("conversation_id", { length: 36 }).references(() => conversations.id, { onDelete: "set null" }),
     agent_id: varchar("agent_id", { length: 36 }).references(() => agents.id, { onDelete: "set null" }),
+    
+    // 项目关联
+    project_id: varchar("project_id", { length: 36 }), // 绑定项目
+    
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
     status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, in_progress, completed, failed
@@ -137,6 +152,7 @@ export const tasks = pgTable(
     index("tasks_status_idx").on(table.status),
     index("tasks_priority_idx").on(table.priority),
     index("tasks_created_at_idx").on(table.created_at),
+    index("tasks_project_id_idx").on(table.project_id),
   ]
 );
 
@@ -146,6 +162,10 @@ export const tickets = pgTable(
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
     task_id: varchar("task_id", { length: 36 }).references(() => tasks.id, { onDelete: "set null" }),
+    
+    // 项目关联
+    project_id: varchar("project_id", { length: 36 }), // 绑定项目
+    
     type: varchar("type", { length: 20 }).notNull(), // bug, feature, improvement
     title: varchar("title", { length: 255 }).notNull(),
     description: text("description"),
@@ -164,6 +184,7 @@ export const tickets = pgTable(
     index("tickets_assignee_id_idx").on(table.assignee_id),
     index("tickets_reporter_id_idx").on(table.reporter_id),
     index("tickets_created_at_idx").on(table.created_at),
+    index("tickets_project_id_idx").on(table.project_id),
   ]
 );
 
@@ -198,6 +219,9 @@ export const pipelines = pgTable(
     name: varchar("name", { length: 255 }).notNull(),
     description: text("description"),
     
+    // 项目关联
+    project_id: varchar("project_id", { length: 36 }), // 绑定项目
+    
     // 流水线配置
     trigger_type: varchar("trigger_type", { length: 20 }).default("manual"), // manual, scheduled, webhook
     trigger_config: jsonb("trigger_config"), // 定时任务或webhook配置
@@ -216,6 +240,7 @@ export const pipelines = pgTable(
     index("pipelines_status_idx").on(table.status),
     index("pipelines_is_active_idx").on(table.is_active),
     index("pipelines_created_at_idx").on(table.created_at),
+    index("pipelines_project_id_idx").on(table.project_id),
   ]
 );
 
