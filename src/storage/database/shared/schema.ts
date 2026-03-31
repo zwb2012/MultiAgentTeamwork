@@ -362,3 +362,87 @@ export const healthCheck = pgTable("health_check", {
   id: serial().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
+
+// ============================================
+// 项目管理表
+// ============================================
+
+// 项目表
+export const projects = pgTable(
+  "projects",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    
+    // 基本信息
+    name: varchar("name", { length: 255 }).notNull(),
+    description: text("description"),
+    
+    // Git 仓库配置
+    git_url: varchar("git_url", { length: 512 }).notNull(),
+    git_branch: varchar("git_branch", { length: 128 }).default("main"),
+    git_token: text("git_token"), // 加密存储的访问令牌
+    
+    // 同步配置
+    sync_enabled: boolean("sync_enabled").default(true).notNull(),
+    sync_interval: integer("sync_interval").default(300), // 同步间隔(秒)，默认5分钟
+    last_sync_at: timestamp("last_sync_at", { withTimezone: true }),
+    next_sync_at: timestamp("next_sync_at", { withTimezone: true }),
+    
+    // 同步状态
+    sync_status: varchar("sync_status", { length: 20 }).default("pending"), // pending, syncing, success, failed
+    sync_error: text("sync_error"), // 同步失败错误信息
+    last_commit_sha: varchar("last_commit_sha", { length: 64 }), // 最后同步的commit SHA
+    
+    // 本地存储路径
+    local_path: varchar("local_path", { length: 512 }), // 克隆到本地的路径
+    
+    // 项目配置
+    config: jsonb("config"), // { build_command, test_command, deploy_command }
+    
+    // 状态
+    is_active: boolean("is_active").default(true).notNull(),
+    
+    // 时间戳
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("projects_name_idx").on(table.name),
+    index("projects_sync_status_idx").on(table.sync_status),
+    index("projects_is_active_idx").on(table.is_active),
+    index("projects_next_sync_at_idx").on(table.next_sync_at),
+  ]
+);
+
+// 项目同步历史表
+export const project_sync_history = pgTable(
+  "project_sync_history",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    project_id: varchar("project_id", { length: 36 }).notNull().references(() => projects.id, { onDelete: "cascade" }),
+    
+    // 同步类型
+    sync_type: varchar("sync_type", { length: 20 }).notNull(), // auto, manual, webhook
+    
+    // 同步状态
+    status: varchar("status", { length: 20 }).notNull(), // running, success, failed
+    
+    // Git 信息
+    before_commit_sha: varchar("before_commit_sha", { length: 64 }),
+    after_commit_sha: varchar("after_commit_sha", { length: 64 }),
+    commits_count: integer("commits_count").default(0),
+    
+    // 同步详情
+    changes: jsonb("changes"), // { added: [], modified: [], deleted: [] }
+    error_message: text("error_message"),
+    
+    // 时间记录
+    started_at: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    completed_at: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("project_sync_history_project_id_idx").on(table.project_id),
+    index("project_sync_history_status_idx").on(table.status),
+    index("project_sync_history_started_at_idx").on(table.started_at),
+  ]
+);
