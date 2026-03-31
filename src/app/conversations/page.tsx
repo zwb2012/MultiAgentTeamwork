@@ -17,13 +17,18 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   MessageSquare, 
   Plus, 
   Send,
   Bot,
   User,
-  Loader2
+  Loader2,
+  Terminal,
+  Play,
+  Square,
+  Info
 } from 'lucide-react';
 import type { Agent, Message } from '@/types/agent';
 
@@ -51,6 +56,8 @@ export default function ConversationsPage() {
   const [newConversationDesc, setNewConversationDesc] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [streamingAgentId, setStreamingAgentId] = useState<string | null>(null);
+  const [streamingAgentName, setStreamingAgentName] = useState<string>('');
+  const [processStatus, setProcessStatus] = useState<Record<string, { running: boolean; pid: number | null }>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,6 +68,8 @@ export default function ConversationsPage() {
   useEffect(() => {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id);
+      // 检查进程状态
+      checkProcessStatus();
     }
   }, [selectedConversation]);
 
@@ -87,7 +96,7 @@ export default function ConversationsPage() {
 
   const fetchAgents = async () => {
     try {
-      const response = await fetch('/api/agents?status=idle');
+      const response = await fetch('/api/agents');
       const result = await response.json();
       
       if (result.success) {
@@ -108,6 +117,27 @@ export default function ConversationsPage() {
       }
     } catch (error) {
       console.error('获取消息列表失败:', error);
+    }
+  };
+
+  const checkProcessStatus = async () => {
+    if (!selectedConversation) return;
+    
+    for (const p of selectedConversation.conversation_participants) {
+      if (p.agents.agent_type === 'process') {
+        try {
+          const response = await fetch(`/api/agents/${p.agent_id}/process`);
+          const result = await response.json();
+          if (result.success) {
+            setProcessStatus(prev => ({
+              ...prev,
+              [p.agent_id]: result.data
+            }));
+          }
+        } catch (error) {
+          console.error('检查进程状态失败:', error);
+        }
+      }
     }
   };
 
@@ -145,7 +175,8 @@ export default function ConversationsPage() {
     }
   };
 
-  const handleSendMessage = async (agentId: string) => {
+  // 发送消息（自动识别智能体）
+  const handleSendMessage = async () => {
     if (!inputMessage.trim() || !selectedConversation) return;
 
     setIsLoading(true);
@@ -157,23 +188,22 @@ export default function ConversationsPage() {
       const tempUserMsg: Message = {
         id: 'temp-user',
         conversation_id: selectedConversation.id,
-        agent_id: agentId,
         role: 'user',
         content: userMessage,
         created_at: new Date().toISOString()
       };
       setMessages(prev => [...prev, tempUserMsg]);
 
-      // 流式获取AI回复
-      setStreamingAgentId(agentId);
+      // 流式获取AI回复（自动识别智能体）
+      setStreamingAgentId('auto');
       
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: selectedConversation.id,
-          agent_id: agentId,
-          user_message: userMessage
+          user_message: userMessage,
+          auto_detect: true
         })
       });
 
@@ -184,12 +214,13 @@ export default function ConversationsPage() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let aiMessage = '';
+      let detectedAgentId = '';
+      let detectedAgentName = '';
 
       // 添加临时AI消息
       const tempAiMsg: Message = {
         id: 'temp-ai',
         conversation_id: selectedConversation.id,
-        agent_id: agentId,
         role: 'assistant',
         content: '',
         created_at: new Date().toISOString()
@@ -208,11 +239,10 @@ export default function ConversationsPage() {
             const data = line.slice(6);
             
             if (data === '[DONE]') {
-              // 完成,保存完整消息
               setMessages(prev => 
                 prev.map(msg => 
                   msg.id === 'temp-ai' 
-                    ? { ...msg, content: aiMessage }
+                    ? { ...msg, content: aiMessage, agent_id: detectedAgentId }
                     : msg
                 )
               );
@@ -223,7 +253,11 @@ export default function ConversationsPage() {
               const parsed = JSON.parse(data);
               if (parsed.content) {
                 aiMessage += parsed.content;
-                // 实时更新AI消息
+                if (parsed.agent_id && !detectedAgentId) {
+                  detectedAgentId = parsed.agent_id;
+                  detectedAgentName = parsed.agent_name || '';
+                  setStreamingAgentName(detectedAgentName);
+                }
                 setMessages(prev => 
                   prev.map(msg => 
                     msg.id === 'temp-ai' 
@@ -240,6 +274,7 @@ export default function ConversationsPage() {
       }
 
       setStreamingAgentId(null);
+      setStreamingAgentName('');
       fetchMessages(selectedConversation.id);
     } catch (error) {
       console.error('发送消息失败:', error);
@@ -247,11 +282,55 @@ export default function ConversationsPage() {
     } finally {
       setIsLoading(false);
       setStreamingAgentId(null);
+      setStreamingAgentName('');
     }
   };
 
-  const getAgentInfo = (agentId: string) => {
-    if (!selectedConversation) return null;
+  // 启动进程
+  const handleStartProcess = async (agentId: string) => {
+    try {
+      const response = await fetch(`/api/agents/${agentId}/process`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setProcessStatus(prev => ({
+          ...prev,
+          [agentId]: { running: true, pid: result.data.pid }
+        }));
+      } else {
+        alert('启动失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('启动进程失败:', error);
+      alert('启动失败');
+    }
+  };
+
+  // 停止进程
+  const handleStopProcess = async (agentId: string) => {
+    try {
+      const response = await fetch(`/api/agents/${agentId}/process`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setProcessStatus(prev => ({
+          ...prev,
+          [agentId]: { running: false, pid: null }
+        }));
+      }
+    } catch (error) {
+      console.error('停止进程失败:', error);
+    }
+  };
+
+  const getAgentInfo = (agentId: string | undefined) => {
+    if (!selectedConversation || !agentId) return null;
     const participant = selectedConversation.conversation_participants.find(
       p => p.agent_id === agentId
     );
@@ -319,9 +398,14 @@ export default function ConversationsPage() {
                         />
                         <label
                           htmlFor={agent.id}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex items-center gap-2"
                         >
-                          {agent.name} - <span className="text-muted-foreground">{agent.role}</span>
+                          {agent.name}
+                          {agent.agent_type === 'process' ? (
+                            <Badge variant="outline" className="text-xs"><Terminal className="h-3 w-3 mr-1" />进程</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs"><Bot className="h-3 w-3 mr-1" />LLM</Badge>
+                          )}
                         </label>
                       </div>
                     ))}
@@ -394,21 +478,52 @@ export default function ConversationsPage() {
                   <CardDescription>
                     {selectedConversation.description}
                   </CardDescription>
-                  <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {selectedConversation.conversation_participants.map(p => (
-                      <Badge key={p.agent_id} variant="secondary">
-                        {p.agents.name} ({p.agents.role})
-                      </Badge>
+                      <div key={p.agent_id} className="flex items-center gap-2">
+                        <Badge variant="secondary">
+                          {p.agents.name} ({p.agents.role})
+                        </Badge>
+                        {p.agents.agent_type === 'process' && (
+                          processStatus[p.agent_id]?.running ? (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleStopProcess(p.agent_id)}
+                            >
+                              <Square className="h-3 w-3 mr-1" />
+                              停止
+                            </Button>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => handleStartProcess(p.agent_id)}
+                            >
+                              <Play className="h-3 w-3 mr-1" />
+                              启动
+                            </Button>
+                          )
+                        )}
+                      </div>
                     ))}
                   </div>
+                  
+                  {/* 提示信息 */}
+                  <Alert className="mt-2">
+                    <Info className="h-4 w-4" />
+                    <AlertDescription className="text-xs">
+                      提示：在消息中提到智能体的名字即可唤起它。例如："张三，请帮我看看这个bug"
+                    </AlertDescription>
+                  </Alert>
                 </CardHeader>
                 
                 <CardContent className="flex-1 overflow-hidden p-0">
-                  <ScrollArea className="h-[calc(100vh-20rem)] p-4">
+                  <ScrollArea className="h-[calc(100vh-24rem)] p-4">
                     {messages.map((msg, index) => {
                       const agentInfo = msg.agent_id ? getAgentInfo(msg.agent_id) : null;
                       const isUser = msg.role === 'user';
-                      const isStreaming = streamingAgentId === msg.agent_id && msg.id === 'temp-ai';
+                      const isStreaming = streamingAgentId === 'auto' && msg.id === 'temp-ai';
                       
                       return (
                         <div
@@ -417,7 +532,11 @@ export default function ConversationsPage() {
                         >
                           {!isUser && (
                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                              <Bot className="h-4 w-4" />
+                              {agentInfo?.agent_type === 'process' ? (
+                                <Terminal className="h-4 w-4" />
+                              ) : (
+                                <Bot className="h-4 w-4" />
+                              )}
                             </div>
                           )}
                           
@@ -459,29 +578,31 @@ export default function ConversationsPage() {
                     <Input
                       value={inputMessage}
                       onChange={(e) => setInputMessage(e.target.value)}
-                      placeholder="输入消息..."
+                      placeholder="输入消息，提到智能体名字可唤起它..."
                       onKeyPress={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey && selectedConversation.conversation_participants.length > 0) {
+                        if (e.key === 'Enter' && !e.shiftKey) {
                           e.preventDefault();
-                          handleSendMessage(selectedConversation.conversation_participants[0].agent_id);
+                          handleSendMessage();
                         }
                       }}
                       disabled={isLoading}
                     />
-                    {selectedConversation.conversation_participants.map(p => (
-                      <Button
-                        key={p.agent_id}
-                        size="icon"
-                        onClick={() => handleSendMessage(p.agent_id)}
-                        disabled={isLoading || !inputMessage.trim()}
-                      >
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={isLoading || !inputMessage.trim()}
+                    >
+                      {isLoading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
                         <Send className="h-4 w-4" />
-                      </Button>
-                    ))}
+                      )}
+                    </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    点击发送按钮选择对应的智能体进行对话
-                  </p>
+                  {streamingAgentName && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {streamingAgentName} 正在回复...
+                    </p>
+                  )}
                 </div>
               </Card>
             ) : (

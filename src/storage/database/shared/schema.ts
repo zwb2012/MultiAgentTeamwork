@@ -9,9 +9,23 @@ export const agents = pgTable(
     name: varchar("name", { length: 128 }).notNull(),
     role: varchar("role", { length: 64 }).notNull(), // developer, tester, reviewer, etc.
     system_prompt: text("system_prompt").notNull(),
-    model: varchar("model", { length: 64 }).notNull().default("doubao-seed-1-8-251228"),
-    status: varchar("status", { length: 20 }).notNull().default("idle"), // idle, working, paused
-    config: jsonb("config"), // 其他配置: temperature, max_tokens等
+    
+    // 智能体类型: llm(大模型) 或 process(本地进程)
+    agent_type: varchar("agent_type", { length: 20 }).notNull().default("llm"),
+    
+    // 大模型配置 (当 agent_type = llm 时使用)
+    model: varchar("model", { length: 64 }).default("doubao-seed-1-8-251228"),
+    model_config: jsonb("model_config"), // { api_key, base_url, temperature, thinking, caching, max_tokens }
+    
+    // 进程配置 (当 agent_type = process 时使用)
+    process_config: jsonb("process_config"), // { command, args, env, cwd, platform }
+    
+    // 状态管理
+    status: varchar("status", { length: 20 }).notNull().default("idle"), // idle, working, paused, error
+    process_pid: integer("process_pid"), // 进程PID (当 agent_type = process 时)
+    
+    // 其他配置
+    config: jsonb("config"), // 其他通用配置
     is_active: boolean("is_active").default(true).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
@@ -20,6 +34,7 @@ export const agents = pgTable(
     index("agents_role_idx").on(table.role),
     index("agents_status_idx").on(table.status),
     index("agents_is_active_idx").on(table.is_active),
+    index("agents_agent_type_idx").on(table.agent_type),
   ]
 );
 

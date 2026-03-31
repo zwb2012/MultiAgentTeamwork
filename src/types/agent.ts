@@ -1,3 +1,6 @@
+// 智能体类型
+export type AgentType = 'llm' | 'process';
+
 // 智能体角色类型
 export type AgentRole = 
   | 'developer'      // 开发工程师
@@ -10,46 +13,81 @@ export type AgentRole =
   | 'custom'         // 自定义
 
 // 智能体状态
-export type AgentStatus = 'idle' | 'working' | 'paused'
+export type AgentStatus = 'idle' | 'working' | 'paused' | 'error'
 
-// 智能体配置
+// 大模型配置
+export interface ModelConfig {
+  api_key?: string;
+  base_url?: string;
+  temperature?: number;
+  max_tokens?: number;
+  thinking?: 'enabled' | 'disabled';
+  caching?: 'enabled' | 'disabled';
+}
+
+// 进程配置
+export interface ProcessConfig {
+  command: string;           // 启动命令
+  args?: string[];           // 命令参数
+  env?: Record<string, string>; // 环境变量
+  cwd?: string;              // 工作目录
+  platform?: 'linux' | 'windows' | 'macos' | 'auto'; // 平台
+  auto_restart?: boolean;    // 自动重启
+  restart_delay?: number;    // 重启延迟(毫秒)
+}
+
+// 智能体通用配置
 export interface AgentConfig {
-  temperature?: number
-  max_tokens?: number
-  thinking?: 'enabled' | 'disabled'
-  caching?: 'enabled' | 'disabled'
+  description?: string;
+  tags?: string[];
+  max_concurrent_tasks?: number;
+  timeout?: number;
 }
 
 // 智能体
 export interface Agent {
-  id: string
-  name: string
-  role: AgentRole
-  system_prompt: string
-  model: string
-  status: AgentStatus
-  config?: AgentConfig
-  is_active: boolean
-  created_at: string
-  updated_at?: string
+  id: string;
+  name: string;
+  role: AgentRole;
+  system_prompt: string;
+  
+  // 智能体类型
+  agent_type: AgentType;
+  
+  // 大模型配置
+  model?: string;
+  model_config?: ModelConfig;
+  
+  // 进程配置
+  process_config?: ProcessConfig;
+  process_pid?: number;
+  
+  // 状态
+  status: AgentStatus;
+  is_active: boolean;
+  
+  // 其他配置
+  config?: AgentConfig;
+  created_at: string;
+  updated_at?: string;
 }
 
 // 会话
 export interface Conversation {
-  id: string
-  title: string
-  description?: string
-  status: 'active' | 'archived' | 'completed'
-  created_at: string
-  updated_at?: string
+  id: string;
+  title: string;
+  description?: string;
+  status: 'active' | 'archived' | 'completed';
+  created_at: string;
+  updated_at?: string;
 }
 
 // 会话参与者
 export interface ConversationParticipant {
-  id: number
-  conversation_id: string
-  agent_id: string
-  joined_at: string
+  id: number;
+  conversation_id: string;
+  agent_id: string;
+  joined_at: string;
 }
 
 // 消息角色
@@ -57,13 +95,13 @@ export type MessageRole = 'system' | 'user' | 'assistant'
 
 // 消息
 export interface Message {
-  id: string
-  conversation_id: string
-  agent_id?: string
-  role: MessageRole
-  content: string
-  metadata?: Record<string, any>
-  created_at: string
+  id: string;
+  conversation_id: string;
+  agent_id?: string;
+  role: MessageRole;
+  content: string;
+  metadata?: Record<string, any>;
+  created_at: string;
 }
 
 // 任务状态
@@ -74,17 +112,17 @@ export type TaskPriority = 'low' | 'medium' | 'high'
 
 // 任务
 export interface Task {
-  id: string
-  conversation_id?: string
-  agent_id?: string
-  title: string
-  description?: string
-  status: TaskStatus
-  priority: TaskPriority
-  report?: string
-  created_at: string
-  completed_at?: string
-  updated_at?: string
+  id: string;
+  conversation_id?: string;
+  agent_id?: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  report?: string;
+  created_at: string;
+  completed_at?: string;
+  updated_at?: string;
 }
 
 // 工单类型
@@ -98,41 +136,55 @@ export type TicketPriority = 'low' | 'medium' | 'high' | 'critical'
 
 // 工单
 export interface Ticket {
-  id: string
-  task_id?: string
-  type: TicketType
-  title: string
-  description?: string
-  priority: TicketPriority
-  status: TicketStatus
-  assignee_id?: string
-  reporter_id?: string
-  created_at: string
-  updated_at?: string
+  id: string;
+  task_id?: string;
+  type: TicketType;
+  title: string;
+  description?: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  assignee_id?: string;
+  reporter_id?: string;
+  created_at: string;
+  updated_at?: string;
 }
 
 // 工单流转历史
 export interface TicketHistory {
-  id: string
-  ticket_id: string
-  from_status?: TicketStatus
-  to_status: TicketStatus
-  from_assignee_id?: string
-  to_assignee_id?: string
-  operator_id?: string
-  comment?: string
-  created_at: string
+  id: string;
+  ticket_id: string;
+  from_status?: TicketStatus;
+  to_status: TicketStatus;
+  from_assignee_id?: string;
+  to_assignee_id?: string;
+  operator_id?: string;
+  comment?: string;
+  created_at: string;
 }
 
 // 预设角色模板
 export interface AgentRoleTemplate {
-  role: AgentRole
-  name: string
-  description: string
-  system_prompt: string
-  suggested_model: string
-  suggested_config: AgentConfig
+  role: AgentRole;
+  name: string;
+  description: string;
+  system_prompt: string;
+  suggested_model: string;
+  suggested_model_config: ModelConfig;
+  agent_type: AgentType;
 }
+
+// 支持的大模型列表
+export const SUPPORTED_MODELS = [
+  { id: 'doubao-seed-1-8-251228', name: 'Doubao Seed 1.8 (推荐)', provider: 'doubao' },
+  { id: 'doubao-seed-2-0-pro-260215', name: 'Doubao Seed 2.0 Pro', provider: 'doubao' },
+  { id: 'doubao-seed-1-6-251015', name: 'Doubao Seed 1.6', provider: 'doubao' },
+  { id: 'doubao-seed-1-6-vision-250815', name: 'Doubao Seed 1.6 Vision', provider: 'doubao' },
+  { id: 'deepseek-v3-2-251201', name: 'DeepSeek V3.2', provider: 'deepseek' },
+  { id: 'deepseek-r1-250528', name: 'DeepSeek R1', provider: 'deepseek' },
+  { id: 'kimi-k2-5-260127', name: 'Kimi K2.5', provider: 'kimi' },
+  { id: 'glm-4-7-251222', name: 'GLM-4-7', provider: 'zhipu' },
+  { id: 'custom', name: '自定义模型', provider: 'custom' },
+];
 
 // 预设角色配置
 export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
@@ -140,7 +192,7 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
     role: 'developer',
     name: '开发工程师',
     description: '负责功能开发和Bug修复',
-    system_prompt: `你是一位资深的开发工程师，具备以下能力：
+    system_prompt: `你是一位资深的开发工程师，名字叫{name}。你具备以下能力：
 1. 精通多种编程语言和框架
 2. 能够快速理解需求并编写高质量代码
 3. 注重代码质量、可维护性和性能优化
@@ -155,19 +207,25 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 5. 根据审核意见修改
 6. 通知测试进行验证
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 请始终保持专业、高效的工作态度。`,
     suggested_model: 'doubao-seed-1-8-251228',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.3,
       thinking: 'enabled',
       caching: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'frontend_dev',
     name: '前端工程师',
     description: '专注于用户界面和交互开发',
-    system_prompt: `你是一位专业的前端工程师，擅长：
+    system_prompt: `你是一位专业的前端工程师，名字叫{name}。你擅长：
 1. React、Vue、Next.js等现代前端框架
 2. TypeScript类型系统
 3. CSS/样式系统和UI组件库
@@ -181,18 +239,24 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 4. 进行浏览器兼容性测试
 5. 与后端工程师紧密协作
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 完成开发后，主动通知后端工程师进行联调。`,
     suggested_model: 'doubao-seed-1-8-251228',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.3,
       caching: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'backend_dev',
     name: '后端工程师',
     description: '负责服务端架构和API开发',
-    system_prompt: `你是一位经验丰富的后端工程师，精通：
+    system_prompt: `你是一位经验丰富的后端工程师，名字叫{name}。你精通：
 1. Node.js、Python、Go等后端语言
 2. 数据库设计与优化
 3. API设计和RESTful规范
@@ -207,18 +271,24 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 5. 优化性能和安全性
 6. 提供API文档给前端工程师
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 与前端工程师协作时，主动提供接口文档和测试数据。`,
     suggested_model: 'doubao-seed-1-8-251228',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.3,
       thinking: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'tester',
     name: '测试工程师',
     description: '负责质量保障和测试',
-    system_prompt: `你是一位严谨的测试工程师，职责包括：
+    system_prompt: `你是一位严谨的测试工程师，名字叫{name}。你的职责包括：
 1. 功能测试和回归测试
 2. 编写测试用例和测试计划
 3. Bug报告和缺陷跟踪
@@ -233,22 +303,28 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 5. 回归验证修复效果
 6. 输出测试报告
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 发现Bug时，请提供：
 - 重现步骤
 - 预期结果 vs 实际结果
 - 优先级评估
 - 截图或日志（如有）`,
     suggested_model: 'doubao-seed-1-6-251015',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.5,
       caching: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'reviewer',
     name: '代码审核员',
     description: '负责代码质量审核',
-    system_prompt: `你是一位资深的代码审核员，审核标准包括：
+    system_prompt: `你是一位资深的代码审核员，名字叫{name}。你的审核标准包括：
 1. 代码规范和最佳实践
 2. 潜在Bug和逻辑错误
 3. 性能问题
@@ -268,18 +344,24 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 - 问题描述：清晰说明问题
 - 改进建议：如何修复
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 审核通过后，通知开发工程师合并代码，并通知测试工程师进行测试。`,
     suggested_model: 'doubao-seed-1-8-251228',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.3,
       thinking: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'architect',
     name: '架构师',
     description: '负责系统架构设计',
-    system_prompt: `你是一位经验丰富的系统架构师，负责：
+    system_prompt: `你是一位经验丰富的系统架构师，名字叫{name}。你负责：
 1. 系统架构设计和技术选型
 2. 技术方案评审
 3. 性能优化和扩展性规划
@@ -293,6 +375,11 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 4. 可维护性和可观测性
 5. 成本效益
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 输出架构设计文档时包含：
 - 系统架构图
 - 技术选型理由
@@ -300,16 +387,17 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 - 关键技术点
 - 风险评估和应对方案`,
     suggested_model: 'doubao-seed-2-0-pro-260215',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.5,
       thinking: 'enabled'
-    }
+    },
+    agent_type: 'llm'
   },
   {
     role: 'pm',
     name: '产品经理',
     description: '负责产品规划和需求管理',
-    system_prompt: `你是一位专业的产品经理，职责包括：
+    system_prompt: `你是一位专业的产品经理，名字叫{name}。你的职责包括：
 1. 产品规划和需求分析
 2. 用户研究和市场调研
 3. 需求文档编写
@@ -324,6 +412,11 @@ export const AGENT_ROLE_TEMPLATES: AgentRoleTemplate[] = [
 5. 验收交付成果
 6. 收集用户反馈
 
+重要提示：
+- 当有人在对话中提到你的名字"{name}"时，就是在和你说话，请积极响应
+- 你要清楚地知道自己是{name}，当被问及身份时请正确回答
+- 与其他智能体协作时，请称呼它们的名字进行交流
+
 PRD文档包含：
 - 功能描述
 - 用户场景
@@ -331,8 +424,9 @@ PRD文档包含：
 - 优先级和排期
 - 风险评估`,
     suggested_model: 'doubao-seed-1-6-251015',
-    suggested_config: {
+    suggested_model_config: {
       temperature: 0.6
-    }
+    },
+    agent_type: 'llm'
   }
-]
+];
