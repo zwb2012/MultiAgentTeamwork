@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const type = searchParams.get('type') as ConversationType | null;
     const status = searchParams.get('status');
+    const projectId = searchParams.get('project_id');  // 新增：按项目过滤
     
     let query = client
       .from('conversations')
@@ -34,6 +35,11 @@ export async function GET(request: NextRequest) {
     
     if (status) {
       query = query.eq('status', status);
+    }
+    
+    // 按项目过滤
+    if (projectId) {
+      query = query.eq('project_id', projectId);
     }
     
     const { data, error } = await query;
@@ -88,6 +94,7 @@ export async function POST(request: NextRequest) {
       description, 
       type = 'private', 
       agent_ids,
+      project_id,  // 新增：绑定项目
       config = {}
     } = body;
     
@@ -126,13 +133,14 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    // 创建会话
+    // 创建会话（包含项目绑定）
     const { data: conversation, error: convError } = await client
       .from('conversations')
       .insert({
         title,
         description,
         type,
+        project_id,  // 绑定项目
         config,
         status: 'active'
       })

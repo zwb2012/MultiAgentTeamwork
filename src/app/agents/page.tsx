@@ -50,9 +50,11 @@ import {
   type CapabilityTag,
   CAPABILITY_TAG_CONFIG
 } from '@/types/agent';
+import type { Project } from '@/types/project';
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<AgentRole>('developer');
   const [activeTab, setActiveTab] = useState<'all' | 'templates' | 'project'>('all');
@@ -78,6 +80,7 @@ export default function AgentsPage() {
     system_prompt: string;
     agent_type: AgentType;
     is_template: boolean;
+    project_id: string | null;
     // LLM配置
     model: string;
     model_config: ModelConfig;
@@ -91,6 +94,7 @@ export default function AgentsPage() {
     system_prompt: '',
     agent_type: 'llm',
     is_template: false,
+    project_id: null,
     model: 'doubao-seed-1-8-251228',
     model_config: {
       temperature: 0.3,
@@ -117,7 +121,21 @@ export default function AgentsPage() {
   useEffect(() => {
     fetchAgents();
     fetchGlobalConfig();
+    fetchProjects();
   }, []);
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('/api/projects');
+      const result = await response.json();
+      
+      if (result.success) {
+        setProjects(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取项目列表失败:', error);
+    }
+  };
 
   const fetchGlobalConfig = async () => {
     try {
@@ -224,7 +242,8 @@ export default function AgentsPage() {
         role: formData.role,
         system_prompt: formData.system_prompt,
         agent_type: formData.agent_type,
-        is_template: formData.is_template
+        is_template: formData.is_template,
+        project_id: formData.is_template ? null : formData.project_id
       };
       
       if (formData.agent_type === 'llm') {
@@ -290,6 +309,7 @@ export default function AgentsPage() {
       system_prompt: '',
       agent_type: 'llm',
       is_template: false,
+      project_id: null,
       model: 'doubao-seed-1-8-251228',
       model_config: {
         temperature: 0.3,
@@ -453,9 +473,35 @@ export default function AgentsPage() {
                   </div>
                   <Switch
                     checked={formData.is_template}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_template: checked })}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_template: checked, project_id: checked ? null : formData.project_id })}
                   />
                 </div>
+                
+                {/* 项目选择（非模板时显示） */}
+                {!formData.is_template && (
+                  <div className="space-y-2">
+                    <Label className="font-medium">所属项目</Label>
+                    <Select
+                      value={formData.project_id || 'none'}
+                      onValueChange={(value) => setFormData({ ...formData, project_id: value === 'none' ? null : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择项目（可选）" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">不绑定项目（全局智能体）</SelectItem>
+                        {projects.map(project => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      绑定项目后，智能体将专注于该项目的工作，记忆与项目隔离
+                    </p>
+                  </div>
+                )}
                 
                 {/* 智能体类型选择 */}
                 <div className="space-y-2">

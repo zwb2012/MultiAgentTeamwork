@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { Agent, Message, ModelConfig } from '@/types/agent';
+import { injectProjectContext, buildProjectContextFromProject } from '@/lib/project-context';
 
 // POST /api/chat - AI对话(流式输出)
 export async function POST(request: NextRequest) {
@@ -41,6 +42,27 @@ export async function POST(request: NextRequest) {
         { success: false, error: '会话没有参与者' },
         { status: 400 }
       );
+    }
+    
+    // 获取会话信息（包含项目ID）
+    const { data: conversation, error: convError } = await client
+      .from('conversations')
+      .select('id, title, project_id')
+      .eq('id', conversation_id)
+      .single();
+    
+    // 获取项目上下文
+    let projectContext = null;
+    if (conversation?.project_id) {
+      const { data: project } = await client
+        .from('projects')
+        .select('*')
+        .eq('id', conversation.project_id)
+        .single();
+      
+      if (project) {
+        projectContext = buildProjectContextFromProject(project);
+      }
     }
     
     // 智能识别目标智能体
@@ -114,9 +136,14 @@ export async function POST(request: NextRequest) {
       console.error('获取历史消息失败:', msgError);
     }
     
-    // 构建消息数组
+    // 构建消息数组 - 注入项目上下文
+    const systemPromptWithProject = injectProjectContext(
+      targetAgent.system_prompt,
+      projectContext
+    );
+    
     const messages: any[] = [
-      { role: 'system', content: targetAgent.system_prompt }
+      { role: 'system', content: systemPromptWithProject }
     ];
     
     // 添加历史消息
