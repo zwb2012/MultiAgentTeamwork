@@ -15,6 +15,7 @@ export type NodeType =
   | 'agent'      // 智能体节点
   | 'task'       // 任务节点
   | 'gateway'    // 网关节点
+  | 'parallel'   // 并行网关节点（简化版，替代gateway）
   | 'condition'  // 条件节点
   | 'delay'      // 延迟节点
   | 'start'      // 开始节点
@@ -90,6 +91,12 @@ export interface PipelineNode {
   
   // 可视化位置
   position?: NodePosition;
+  
+  // 额外配置
+  config?: {
+    parallelType?: 'split' | 'join'; // 并行网关类型
+    [key: string]: any;
+  };
   
   // 时间戳
   created_at: string;
