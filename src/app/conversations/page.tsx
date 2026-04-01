@@ -289,7 +289,7 @@ export default function ConversationsPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">会话中心</h1>
+          <h1 className="text-3xl font-bold">会话管理</h1>
           <p className="text-muted-foreground mt-1">
             管理多智能体对话会话，支持私聊、群组和流水线模式
           </p>
