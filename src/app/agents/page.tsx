@@ -417,22 +417,25 @@ export default function AgentsPage() {
     }
   };
 
-  // 在线状态显示
-  const getOnlineBadge = (onlineStatus: string) => {
-    const statusMap: Record<string, { label: string; color: string; icon: any }> = {
-      online: { label: '在线', color: 'bg-green-500', icon: null },
-      offline: { label: '离线', color: 'bg-red-500', icon: null },
-      checking: { label: '检测中', color: 'bg-yellow-500', icon: null },
-      unknown: { label: '未检测', color: 'bg-gray-400', icon: null }
+  // 健康状态显示
+  const getHealthBadge = (onlineStatus: string) => {
+    const statusMap: Record<string, { label: string; color: string; pulse?: boolean }> = {
+      online: { label: '健康', color: 'bg-green-500' },
+      offline: { label: '异常', color: 'bg-red-500' },
+      checking: { label: '检测中', color: 'bg-yellow-500', pulse: true },
+      unknown: { label: '未检测', color: 'bg-gray-400' }
     };
     const config = statusMap[onlineStatus] || statusMap.unknown;
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs ${config.color}`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-white text-xs ${config.color}`}>
+        <span className={`w-1.5 h-1.5 rounded-full bg-white ${config.pulse ? 'animate-pulse' : ''}`}></span>
         {config.label}
       </span>
     );
   };
+
+  // 在线状态显示（兼容旧调用）
+  const getOnlineBadge = getHealthBadge;
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {

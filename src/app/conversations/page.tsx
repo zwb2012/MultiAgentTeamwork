@@ -280,15 +280,28 @@ export default function ConversationsPage() {
     }
   };
 
-  // 获取在线状态颜色
-  const getOnlineColor = (status?: string) => {
+  // 获取健康状态颜色
+  const getHealthColor = (status?: string) => {
     const colors: Record<string, string> = {
-      online: 'bg-green-500',
-      offline: 'bg-red-500',
-      unknown: 'bg-gray-400'
+      online: 'bg-green-500',   // 健康
+      offline: 'bg-red-500',    // 异常
+      unknown: 'bg-gray-400'    // 未检测
     };
     return colors[status || 'unknown'] || colors.unknown;
   };
+
+  // 获取健康状态文字
+  const getHealthLabel = (status?: string) => {
+    const labels: Record<string, string> = {
+      online: '健康',
+      offline: '异常',
+      unknown: '未检测'
+    };
+    return labels[status || 'unknown'] || '未检测';
+  };
+
+  // 兼容旧调用
+  const getOnlineColor = getHealthColor;
 
   // 获取角色标签
   const getRoleLabel = (role?: string) => {
@@ -693,7 +706,7 @@ export default function ConversationsPage() {
                           onlineCount > 0 ? "text-green-600 border-green-300" : "text-muted-foreground"
                         )}
                       >
-                        {onlineCount}/{participants.length} 在线
+                        {onlineCount}/{participants.length} 健康
                       </Badge>
                     </div>
                   </CardHeader>
@@ -711,9 +724,9 @@ export default function ConversationsPage() {
                         const statusText = agent.work_status === 'working'
                           ? '工作中'
                           : agent.online_status === 'online'
-                            ? '在线'
+                            ? '健康'
                             : agent.online_status === 'offline'
-                              ? '离线'
+                              ? '异常'
                               : '未知';
                       
                         return (
@@ -773,12 +786,12 @@ export default function ConversationsPage() {
                             )}
                             {onlineOnlyCount > 0 && (
                               <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                                {onlineOnlyCount} 在线
+                                {onlineOnlyCount} 健康
                               </Badge>
                             )}
                             {workingCount === 0 && onlineOnlyCount === 0 && participants.length > 0 && (
                               <Badge variant="secondary" className="text-xs">
-                                {participants.length} 离线
+                                {participants.length} 异常
                               </Badge>
                             )}
                           </>

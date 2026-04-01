@@ -47,7 +47,8 @@ import {
   Filter,
   Server,
   ArrowRight,
-  Loader2
+  Loader2,
+  Activity
 } from 'lucide-react';
 import { 
   AGENT_ROLE_TEMPLATES, 
@@ -346,6 +347,14 @@ export default function ProjectAgentsPage() {
     } | null;
   } | null>(null);
 
+  // 一键健康检测状态
+  const [batchChecking, setBatchChecking] = useState(false);
+  const [batchCheckResult, setBatchCheckResult] = useState<{
+    total: number;
+    healthy: number;
+    unhealthy: number;
+  } | null>(null);
+
   // 健康检查
   const handleHealthCheck = async (agentId: string) => {
     const agent = agents.find(a => a.id === agentId);
@@ -386,6 +395,56 @@ export default function ProjectAgentsPage() {
     }
   };
 
+  // 一键健康检测 - 检测当前页面的所有智能体
+  const handleBatchHealthCheck = async () => {
+    if (filteredAgents.length === 0) {
+      alert('没有可检测的智能体');
+      return;
+    }
+
+    setBatchChecking(true);
+    setBatchCheckResult(null);
+
+    try {
+      let healthy = 0;
+      let unhealthy = 0;
+
+      // 逐个检测智能体
+      for (const agent of filteredAgents) {
+        try {
+          const response = await fetch(`/api/agents/${agent.id}/health-check`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ check_type: 'manual' })
+          });
+          
+          const result = await response.json();
+          if (result.success && result.data?.online) {
+            healthy++;
+          } else {
+            unhealthy++;
+          }
+        } catch {
+          unhealthy++;
+        }
+      }
+
+      setBatchCheckResult({
+        total: filteredAgents.length,
+        healthy,
+        unhealthy
+      });
+
+      // 刷新智能体列表
+      fetchAgents();
+    } catch (error) {
+      console.error('批量健康检测失败:', error);
+      alert('批量健康检测失败');
+    } finally {
+      setBatchChecking(false);
+    }
+  };
+
   // 筛选智能体
   const filteredAgents = agents.filter(agent => {
     if (filterProject === 'all') return true;
@@ -393,22 +452,25 @@ export default function ProjectAgentsPage() {
     return agent.project_id === filterProject;
   });
 
-  // 在线状态显示
-  const getOnlineBadge = (onlineStatus: string) => {
-    const statusMap: Record<string, { label: string; className: string }> = {
-      online: { label: '在线', className: 'bg-green-500' },
-      offline: { label: '离线', className: 'bg-red-500' },
-      checking: { label: '检测中', className: 'bg-yellow-500' },
+  // 健康状态显示
+  const getHealthBadge = (onlineStatus: string) => {
+    const statusMap: Record<string, { label: string; className: string; pulse?: boolean }> = {
+      online: { label: '健康', className: 'bg-green-500' },
+      offline: { label: '异常', className: 'bg-red-500' },
+      checking: { label: '检测中', className: 'bg-yellow-500', pulse: true },
       unknown: { label: '未检测', className: 'bg-gray-400' }
     };
     const config = statusMap[onlineStatus] || statusMap.unknown;
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-white text-xs ${config.className}`}>
-        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-white text-xs ${config.className}`}>
+        <span className={`w-1.5 h-1.5 rounded-full bg-white ${config.pulse ? 'animate-pulse' : ''}`}></span>
         {config.label}
       </span>
     );
   };
+
+  // 兼容旧调用
+  const getOnlineBadge = getHealthBadge;
 
   const getWorkStatusBadge = (workStatus: string) => {
     const statusMap: Record<string, { label: string; className: string; icon: typeof CheckCircle2 }> = {
@@ -460,13 +522,47 @@ export default function ProjectAgentsPage() {
           </p>
         </div>
         
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              创建智能体
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          {/* 一键健康检测结果统计 */}
+          {batchCheckResult && (
+            <div className="flex items-center gap-4 px-4 py-2 bg-muted rounded-lg text-sm">
+              <span className="text-muted-foreground">检测结果:</span>
+              <span className="text-green-600 font-medium flex items-center gap-1">
+                <CheckCircle2 className="h-4 w-4" />
+                健康 {batchCheckResult.healthy}
+              </span>
+              <span className="text-red-600 font-medium flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                异常 {batchCheckResult.unhealthy}
+              </span>
+            </div>
+          )}
+          
+          <Button 
+            variant="outline" 
+            onClick={handleBatchHealthCheck}
+            disabled={batchChecking || filteredAgents.length === 0}
+          >
+            {batchChecking ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                检测中...
+              </>
+            ) : (
+              <>
+                <Activity className="h-4 w-4 mr-2" />
+                一键检测
+              </>
+            )}
+          </Button>
+          
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                创建智能体
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>创建项目智能体</DialogTitle>
@@ -796,6 +892,7 @@ export default function ProjectAgentsPage() {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* 筛选 */}

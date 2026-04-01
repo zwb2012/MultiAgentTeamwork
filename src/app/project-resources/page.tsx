@@ -406,15 +406,16 @@ export default function ProjectResourcesPage() {
     }
   };
 
-  const getOnlineBadge = (status: string) => {
+  // 获取健康状态徽章
+  const getHealthBadge = (status: string) => {
     const colors: Record<string, string> = {
-      online: 'bg-green-500',
-      offline: 'bg-red-500',
-      unknown: 'bg-gray-400'
+      online: 'bg-green-500',   // 健康
+      offline: 'bg-red-500',    // 异常
+      unknown: 'bg-gray-400'    // 未检测
     };
     const labels: Record<string, string> = {
-      online: '在线',
-      offline: '离线',
+      online: '健康',
+      offline: '异常',
       unknown: '未检测'
     };
     return (
@@ -423,6 +424,9 @@ export default function ProjectResourcesPage() {
       </span>
     );
   };
+
+  // 兼容旧调用
+  const getOnlineBadge = getHealthBadge;
 
   // 获取角色标签
   const getRoleLabel = (role?: string) => {
@@ -483,7 +487,7 @@ export default function ProjectResourcesPage() {
           <CardContent>
             <div className="text-2xl font-bold">{agents.length}</div>
             <p className="text-xs text-muted-foreground">
-              {agents.filter(a => a.online_status === 'online').length} 在线
+              {agents.filter(a => a.online_status === 'online').length} 健康
             </p>
           </CardContent>
         </Card>
@@ -858,7 +862,7 @@ export default function ProjectResourcesPage() {
                           variant="outline" 
                           className={`text-xs ${onlineCount > 0 ? 'text-green-600 border-green-300' : 'text-muted-foreground'}`}
                         >
-                          {onlineCount}/{participants.length} 在线
+                          {onlineCount}/{participants.length} 健康
                         </Badge>
                       </div>
                     </CardHeader>
@@ -877,9 +881,9 @@ export default function ProjectResourcesPage() {
                           const statusText = agent.work_status === 'working'
                             ? '工作中'
                             : agent.online_status === 'online'
-                              ? '在线'
+                              ? '健康'
                               : agent.online_status === 'offline'
-                                ? '离线'
+                                ? '异常'
                                 : '未知';
                           
                           return (
@@ -924,7 +928,7 @@ export default function ProjectResourcesPage() {
                         )}
                       </div>
                       
-                      {/* 在线/工作中统计 */}
+                      {/* 健康/工作中统计 */}
                       <div className="flex items-center gap-2 mb-2">
                         {(() => {
                           const workingCount = participants.filter((a: Agent) => a.work_status === 'working').length;
@@ -939,12 +943,12 @@ export default function ProjectResourcesPage() {
                               )}
                               {onlineCount > 0 && (
                                 <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                                  {onlineCount} 在线
+                                  {onlineCount} 健康
                                 </Badge>
                               )}
                               {workingCount === 0 && onlineCount === 0 && participants.length > 0 && (
                                 <Badge variant="secondary" className="text-xs">
-                                  {participants.length} 离线
+                                  {participants.length} 异常
                                 </Badge>
                               )}
                             </>

@@ -194,14 +194,18 @@ export default function ConversationDetailPage() {
     }
   };
 
-  const getOnlineStatus = (status?: string) => {
+  // 获取健康状态颜色
+  const getHealthStatus = (status?: string) => {
     const colors: Record<string, string> = {
-      online: 'bg-green-500',
-      offline: 'bg-red-500',
-      unknown: 'bg-gray-400'
+      online: 'bg-green-500',   // 健康
+      offline: 'bg-red-500',    // 异常
+      unknown: 'bg-gray-400'    // 未检测
     };
     return colors[status || 'unknown'] || colors.unknown;
   };
+
+  // 兼容旧调用
+  const getOnlineStatus = getHealthStatus;
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
