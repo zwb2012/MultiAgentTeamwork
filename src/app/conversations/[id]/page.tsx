@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -32,10 +32,20 @@ export default function ConversationDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [aiResponding, setAiResponding] = useState(false);
+  const [streamingMessage, setStreamingMessage] = useState('');
+  const [respondingAgent, setRespondingAgent] = useState<Agent | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchConversation();
   }, [conversationId]);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingMessage]);
 
   const fetchConversation = async () => {
     try {
@@ -78,28 +88,109 @@ export default function ConversationDetailPage() {
   };
 
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || sending) return;
+    if (!inputMessage.trim() || sending || aiResponding) return;
     
+    const userMessage = inputMessage.trim();
+    setInputMessage('');
     setSending(true);
+    
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+      // 先添加用户消息到界面
+      const userMsg: Message = {
+        id: `temp-${Date.now()}`,
+        conversation_id: conversationId,
+        role: 'user',
+        content: userMessage,
+        created_at: new Date().toISOString(),
+        message_type: 'text'
+      };
+      setMessages(prev => [...prev, userMsg]);
+      
+      // 调用 chat API 获取 AI 回复（流式输出）
+      setAiResponding(true);
+      setStreamingMessage('');
+      
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          role: 'user',
-          content: inputMessage
+          conversation_id: conversationId,
+          user_message: userMessage
         })
       });
       
-      const result = await response.json();
-      if (result.success) {
-        setMessages(prev => [...prev, result.data]);
-        setInputMessage('');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '请求失败');
       }
+      
+      // 处理流式响应
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullContent = '';
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') {
+                // 流结束
+                break;
+              }
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullContent += parsed.content;
+                  setStreamingMessage(fullContent);
+                  
+                  // 设置响应的智能体
+                  if (parsed.agent_id && !respondingAgent) {
+                    const agent = participants.find(a => a.id === parsed.agent_id);
+                    if (agent) setRespondingAgent(agent);
+                  }
+                }
+                if (parsed.error) {
+                  throw new Error(parsed.error);
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+      }
+      
+      // 添加 AI 回复到消息列表
+      if (fullContent) {
+        const aiMsg: Message = {
+          id: `ai-${Date.now()}`,
+          conversation_id: conversationId,
+          agent_id: respondingAgent?.id,
+          role: 'assistant',
+          content: fullContent,
+          created_at: new Date().toISOString(),
+          message_type: 'text'
+        };
+        setMessages(prev => [...prev, aiMsg]);
+      }
+      
     } catch (error) {
       console.error('发送消息失败:', error);
+      alert(error instanceof Error ? error.message : '发送失败');
+      // 移除失败的用户消息
+      setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
     } finally {
       setSending(false);
+      setAiResponding(false);
+      setStreamingMessage('');
+      setRespondingAgent(null);
     }
   };
 
@@ -160,7 +251,9 @@ export default function ConversationDetailPage() {
             {participants.map(agent => (
               <div 
                 key={agent.id}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer"
+                className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer ${
+                  respondingAgent?.id === agent.id ? 'bg-primary/10' : ''
+                }`}
               >
                 <div className="relative">
                   <Avatar className="h-8 w-8">
@@ -174,6 +267,9 @@ export default function ConversationDetailPage() {
                   <div className="text-sm font-medium truncate">{agent.name}</div>
                   <div className="text-xs text-muted-foreground">{agent.role}</div>
                 </div>
+                {respondingAgent?.id === agent.id && (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                )}
               </div>
             ))}
           </div>
@@ -183,8 +279,8 @@ export default function ConversationDetailPage() {
       {/* 右侧 - 消息区域 */}
       <div className="flex-1 flex flex-col">
         {/* 消息列表 */}
-        <ScrollArea className="flex-1 p-4">
-          {messages.length === 0 ? (
+        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+          {messages.length === 0 && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <MessageSquare className="h-12 w-12 mb-4" />
               <p>暂无消息</p>
@@ -227,6 +323,26 @@ export default function ConversationDetailPage() {
                   </div>
                 );
               })}
+              
+              {/* 流式输出中的消息 */}
+              {streamingMessage && respondingAgent && (
+                <div className="flex gap-3 justify-start">
+                  <Avatar className="h-8 w-8 mt-1">
+                    <AvatarFallback className="bg-primary/10">
+                      <Bot className="h-4 w-4" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="max-w-[70%] bg-muted rounded-lg p-3">
+                    <div className="text-xs font-medium mb-1 text-muted-foreground">
+                      {respondingAgent.name}
+                      <Loader2 className="inline h-3 w-3 ml-2 animate-spin" />
+                    </div>
+                    <p className="text-sm whitespace-pre-wrap">{streamingMessage}</p>
+                  </div>
+                </div>
+              )}
+              
+              <div ref={messagesEndRef} />
             </div>
           )}
         </ScrollArea>
@@ -237,7 +353,7 @@ export default function ConversationDetailPage() {
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="输入消息..."
+              placeholder={aiResponding ? "AI 正在回复..." : "输入消息..."}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -245,9 +361,10 @@ export default function ConversationDetailPage() {
                 }
               }}
               className="flex-1"
+              disabled={aiResponding}
             />
-            <Button onClick={handleSendMessage} disabled={sending || !inputMessage.trim()}>
-              {sending ? (
+            <Button onClick={handleSendMessage} disabled={sending || aiResponding || !inputMessage.trim()}>
+              {sending || aiResponding ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />

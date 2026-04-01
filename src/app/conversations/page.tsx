@@ -372,7 +372,7 @@ export default function ConversationsPage() {
               {/* 选择参与者 */}
               {createForm.type !== 'lobby' && (
                 <div className="space-y-2">
-                  <Label>选择参与者 *</Label>
+                  <Label>{createForm.type === 'private' ? '选择对话智能体 *' : '选择参与者 *'}</Label>
                   <ScrollArea className="h-48 border rounded-lg p-2">
                     {agents.length === 0 ? (
                       <div className="text-center text-muted-foreground py-4">
@@ -380,33 +380,67 @@ export default function ConversationsPage() {
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        {agents.map(agent => (
-                          <div
-                            key={agent.id}
-                            className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
-                            onClick={() => toggleAgentSelection(agent.id)}
-                          >
-                            <Checkbox
-                              checked={createForm.selectedAgents.includes(agent.id)}
-                              onCheckedChange={() => toggleAgentSelection(agent.id)}
-                            />
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-xs">
-                                <Bot className="h-3 w-3" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{agent.name}</div>
+                        {agents.map(agent => {
+                          const isSelected = createForm.selectedAgents.includes(agent.id);
+                          const isPrivate = createForm.type === 'private';
+                          
+                          return (
+                            <div
+                              key={agent.id}
+                              className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                                isSelected ? 'bg-primary/10' : 'hover:bg-muted'
+                              }`}
+                              onClick={() => {
+                                if (isPrivate) {
+                                  // 私聊模式：单选
+                                  setCreateForm(prev => ({
+                                    ...prev,
+                                    selectedAgents: isSelected ? [] : [agent.id]
+                                  }));
+                                } else {
+                                  // 群组模式：多选
+                                  setCreateForm(prev => ({
+                                    ...prev,
+                                    selectedAgents: isSelected
+                                      ? prev.selectedAgents.filter(id => id !== agent.id)
+                                      : [...prev.selectedAgents, agent.id]
+                                  }));
+                                }
+                              }}
+                            >
+                              {isPrivate ? (
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                  isSelected ? 'border-primary bg-primary' : 'border-muted-foreground'
+                                }`}>
+                                  {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                                </div>
+                              ) : (
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => toggleAgentSelection(agent.id)}
+                                />
+                              )}
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  <Bot className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{agent.name}</div>
+                              </div>
+                              <span className={`w-2 h-2 rounded-full ${getOnlineColor(agent.online_status)}`} />
                             </div>
-                            <span className={`w-2 h-2 rounded-full ${getOnlineColor(agent.online_status)}`} />
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </ScrollArea>
                   {createForm.selectedAgents.length > 0 && (
                     <p className="text-xs text-muted-foreground">
-                      已选择 {createForm.selectedAgents.length} 个参与者
+                      {createForm.type === 'private'
+                        ? `已选择: ${agents.find(a => a.id === createForm.selectedAgents[0])?.name}`
+                        : `已选择 ${createForm.selectedAgents.length} 个参与者`
+                      }
                     </p>
                   )}
                 </div>

@@ -1089,7 +1089,7 @@ export default function ProjectResourcesPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>选择参与者 *</Label>
+              <Label>{newConversation.type === 'private' ? '选择对话智能体 *' : '选择参与者 *'}</Label>
               <ScrollArea className="h-48 border rounded-lg p-2">
                 {agents.length === 0 ? (
                   <div className="text-center text-muted-foreground py-4">
@@ -1097,50 +1097,77 @@ export default function ProjectResourcesPage() {
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {agents.map(agent => (
-                      <div
-                        key={agent.id}
-                        className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
-                        onClick={() => {
-                          setNewConversation(prev => ({
-                            ...prev,
-                            selectedAgents: prev.selectedAgents.includes(agent.id)
-                              ? prev.selectedAgents.filter(id => id !== agent.id)
-                              : [...prev.selectedAgents, agent.id]
-                          }));
-                        }}
-                      >
-                        <Checkbox
-                          checked={newConversation.selectedAgents.includes(agent.id)}
-                          onCheckedChange={() => {
-                            setNewConversation(prev => ({
-                              ...prev,
-                              selectedAgents: prev.selectedAgents.includes(agent.id)
-                                ? prev.selectedAgents.filter(id => id !== agent.id)
-                                : [...prev.selectedAgents, agent.id]
-                            }));
+                    {agents.map(agent => {
+                      const isSelected = newConversation.selectedAgents.includes(agent.id);
+                      const isPrivate = newConversation.type === 'private';
+                      
+                      return (
+                        <div
+                          key={agent.id}
+                          className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                            isSelected ? 'bg-primary/10' : 'hover:bg-muted'
+                          }`}
+                          onClick={() => {
+                            if (isPrivate) {
+                              // 私聊模式：单选
+                              setNewConversation(prev => ({
+                                ...prev,
+                                selectedAgents: isSelected ? [] : [agent.id]
+                              }));
+                            } else {
+                              // 群组模式：多选
+                              setNewConversation(prev => ({
+                                ...prev,
+                                selectedAgents: isSelected
+                                  ? prev.selectedAgents.filter(id => id !== agent.id)
+                                  : [...prev.selectedAgents, agent.id]
+                              }));
+                            }
                           }}
-                        />
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className="text-xs">
-                            <Bot className="h-3 w-3" />
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{agent.name}</div>
+                        >
+                          {isPrivate ? (
+                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                              isSelected ? 'border-primary bg-primary' : 'border-muted-foreground'
+                            }`}>
+                              {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                            </div>
+                          ) : (
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => {
+                                setNewConversation(prev => ({
+                                  ...prev,
+                                  selectedAgents: isSelected
+                                    ? prev.selectedAgents.filter(id => id !== agent.id)
+                                    : [...prev.selectedAgents, agent.id]
+                                }));
+                              }}
+                            />
+                          )}
+                          <Avatar className="h-6 w-6">
+                            <AvatarFallback className="text-xs">
+                              <Bot className="h-3 w-3" />
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium truncate">{agent.name}</div>
+                          </div>
+                          <span className={`w-2 h-2 rounded-full ${
+                            agent.online_status === 'online' ? 'bg-green-500' : 
+                            agent.online_status === 'offline' ? 'bg-red-500' : 'bg-gray-400'
+                          }`} />
                         </div>
-                        <span className={`w-2 h-2 rounded-full ${
-                          agent.online_status === 'online' ? 'bg-green-500' : 
-                          agent.online_status === 'offline' ? 'bg-red-500' : 'bg-gray-400'
-                        }`} />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </ScrollArea>
               {newConversation.selectedAgents.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  已选择 {newConversation.selectedAgents.length} 个参与者
+                  {newConversation.type === 'private' 
+                    ? `已选择: ${agents.find(a => a.id === newConversation.selectedAgents[0])?.name}`
+                    : `已选择 ${newConversation.selectedAgents.length} 个参与者`
+                  }
                 </p>
               )}
             </div>

@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -37,7 +38,8 @@ import {
   Cpu,
   Terminal,
   Key,
-  Globe
+  Globe,
+  FileText
 } from 'lucide-react';
 import { 
   AGENT_ROLE_TEMPLATES, 
@@ -58,6 +60,12 @@ export default function AgentsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<AgentRole>('developer');
   const [activeTab, setActiveTab] = useState<'all' | 'templates' | 'project'>('all');
+  
+  // 健康日志弹窗状态
+  const [showHealthLogs, setShowHealthLogs] = useState(false);
+  const [selectedAgentForLogs, setSelectedAgentForLogs] = useState<Agent | null>(null);
+  const [healthLogs, setHealthLogs] = useState<any[]>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   
   // 全局配置
   const [globalConfig, setGlobalConfig] = useState<{
@@ -385,6 +393,27 @@ export default function AgentsPage() {
     } catch (error) {
       console.error('健康检查失败:', error);
       alert('健康检查失败');
+    }
+  };
+
+  // 查看健康日志
+  const handleViewHealthLogs = async (agent: Agent) => {
+    setSelectedAgentForLogs(agent);
+    setShowHealthLogs(true);
+    setLoadingLogs(true);
+    setHealthLogs([]);
+    
+    try {
+      const response = await fetch(`/api/agents/${agent.id}/health-logs?limit=50`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setHealthLogs(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取健康日志失败:', error);
+    } finally {
+      setLoadingLogs(false);
     }
   };
 
@@ -1030,6 +1059,14 @@ export default function AgentsPage() {
                   </Button>
                   <Button 
                     size="sm" 
+                    variant="outline"
+                    onClick={() => handleViewHealthLogs(agent)}
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    日志
+                  </Button>
+                  <Button 
+                    size="sm" 
                     variant="destructive"
                     onClick={() => handleDeleteAgent(agent.id)}
                   >
@@ -1054,6 +1091,93 @@ export default function AgentsPage() {
           </Card>
         )}
       </main>
+
+      {/* 健康日志弹窗 */}
+      <Dialog open={showHealthLogs} onOpenChange={setShowHealthLogs}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>健康检查日志</DialogTitle>
+            <DialogDescription>
+              {selectedAgentForLogs?.name} - 连接状态检查历史
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingLogs ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : healthLogs.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              暂无检查记录
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {healthLogs.map((log, index) => (
+                <div 
+                  key={log.id || index}
+                  className={`p-3 rounded-lg border ${
+                    log.online_status === 'online' 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${
+                        log.online_status === 'online' ? 'bg-green-500' : 'bg-red-500'
+                      }`} />
+                      <span className="font-medium text-sm">
+                        {log.online_status === 'online' ? '连接成功' : '连接失败'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {log.check_type === 'manual' ? '手动检测' : '自动检测'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(log.created_at).toLocaleString('zh-CN')}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {log.check_result && (
+                    <div className="text-sm text-muted-foreground space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span>消息:</span>
+                        <span>{log.check_result.message}</span>
+                      </div>
+                      {log.check_result.latency && (
+                        <div className="flex items-center gap-2">
+                          <span>延迟:</span>
+                          <span>{log.check_result.latency}ms</span>
+                        </div>
+                      )}
+                      {log.check_result.details && (
+                        <div className="text-xs bg-muted/50 p-2 rounded mt-1 break-all">
+                          {log.check_result.details}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {log.error_message && !log.check_result?.message && (
+                    <div className="text-sm text-red-600 mt-1">
+                      错误: {log.error_message}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHealthLogs(false)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

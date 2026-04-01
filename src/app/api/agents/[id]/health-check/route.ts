@@ -11,6 +11,15 @@ export async function POST(
     const { id } = await params;
     const supabase = getSupabaseClient();
     
+    // 获取请求体，判断是手动还是自动检查
+    let checkType = 'manual';
+    try {
+      const body = await request.json();
+      checkType = body.check_type || 'manual';
+    } catch {
+      // 没有请求体，默认手动检查
+    }
+    
     // 获取智能体信息
     const { data: agent, error } = await supabase
       .from('agents')
@@ -108,8 +117,9 @@ export async function POST(
     result.checked_at = new Date().toISOString();
     
     // 更新健康检查结果
+    const onlineStatus = result.online ? 'online' : 'offline';
     const updateData: any = {
-      online_status: result.online ? 'online' : 'offline',
+      online_status: onlineStatus,
       work_status: result.online ? 'idle' : 'error',
       last_health_check: result.checked_at,
       health_check_result: result
@@ -120,12 +130,49 @@ export async function POST(
       .update(updateData)
       .eq('id', id);
     
+    // 记录健康检查日志
+    await supabase
+      .from('agent_health_logs')
+      .insert({
+        agent_id: id,
+        check_type: checkType,
+        online_status: onlineStatus,
+        check_result: {
+          online: result.online,
+          message: result.message,
+          details: result.details,
+          latency: result.latency
+        },
+        error_message: result.online ? null : (result.details || result.message)
+      });
+    
     return NextResponse.json({ 
       success: true, 
       data: result 
     });
   } catch (error) {
     console.error('健康检查失败:', error);
+    
+    // 记录失败日志
+    try {
+      const { id } = await params;
+      const supabase = getSupabaseClient();
+      await supabase
+        .from('agent_health_logs')
+        .insert({
+          agent_id: id,
+          check_type: 'manual',
+          online_status: 'offline',
+          check_result: {
+            online: false,
+            message: '健康检查异常'
+          },
+          error_message: error instanceof Error ? error.message : '未知错误'
+        });
+    } catch (logError) {
+      console.error('记录日志失败:', logError);
+    }
+    
     return NextResponse.json(
       { success: false, error: '健康检查失败' },
       { status: 500 }
