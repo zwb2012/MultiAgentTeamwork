@@ -106,6 +106,11 @@ const navItems: NavItem[] = [
     icon: <Settings className="h-5 w-5" />,
     children: [
       {
+        title: '基础配置',
+        href: '/settings',
+        icon: <Settings className="h-4 w-4" />
+      },
+      {
         title: '大模型配置',
         href: '/model-configs',
         icon: <Server className="h-4 w-4" />

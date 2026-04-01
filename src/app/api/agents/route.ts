@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
 // - project_id: 项目ID (可选，为空则创建为全局模板)
 // - is_template: 是否为模板
 // - template_id: 从模板创建时的模板ID
+// - model_config_id: 大模型配置ID (新方式)
 // - model, model_config, process_config, config, capability_tags
 export async function POST(request: NextRequest) {
   try {
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
       project_id,
       is_template,
       template_id,
+      model_config_id,
       model, 
       model_config,
       process_config,
@@ -105,11 +107,14 @@ export async function POST(request: NextRequest) {
     }
     
     // 根据类型校验
-    if (agent_type === 'llm' && !model) {
-      return NextResponse.json(
-        { success: false, error: 'LLM类型智能体必须指定模型' },
-        { status: 400 }
-      );
+    if (agent_type === 'llm') {
+      // 需要model_config_id或model
+      if (!model_config_id && !model) {
+        return NextResponse.json(
+          { success: false, error: 'LLM类型智能体必须指定大模型配置或模型' },
+          { status: 400 }
+        );
+      }
     }
     
     if (agent_type === 'process' && !process_config?.command) {
@@ -120,6 +125,7 @@ export async function POST(request: NextRequest) {
     }
     
     // 如果指定了template_id，从模板复制配置
+    let finalModelConfigId = model_config_id;
     let finalModel = model;
     let finalModelConfig = model_config;
     let finalProcessConfig = process_config;
@@ -142,6 +148,7 @@ export async function POST(request: NextRequest) {
       }
       
       // 继承模板配置（如果未指定则使用模板的）
+      finalModelConfigId = model_config_id || template.model_config_id;
       finalModel = model || template.model;
       finalModelConfig = model_config || template.model_config;
       finalProcessConfig = process_config || template.process_config;
@@ -153,7 +160,7 @@ export async function POST(request: NextRequest) {
     
     const client = getSupabaseClient();
     
-    const insertData: Record<string, any> = {
+    const insertData: Record<string, unknown> = {
       name,
       role: role as AgentRole,
       system_prompt: finalSystemPrompt,
@@ -173,6 +180,9 @@ export async function POST(request: NextRequest) {
     // LLM类型配置
     if (agent_type === 'llm') {
       insertData.model = finalModel;
+      if (finalModelConfigId) {
+        insertData.model_config_id = finalModelConfigId;
+      }
       if (finalModelConfig) {
         insertData.model_config = finalModelConfig as ModelConfig;
       }

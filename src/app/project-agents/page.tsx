@@ -39,29 +39,26 @@ import {
   Settings,
   Cpu,
   Terminal,
-  Key,
-  Globe,
   RefreshCw,
   MoreVertical,
-  Wifi,
-  WifiOff,
-  HelpCircle,
   Play,
   AlertCircle,
   CheckCircle2,
-  Filter
+  Filter,
+  Server,
+  ArrowRight,
+  Loader2
 } from 'lucide-react';
 import { 
   AGENT_ROLE_TEMPLATES, 
-  SUPPORTED_MODELS, 
   type Agent, 
   type AgentRole, 
   type AgentType,
-  type ModelConfig,
   type CapabilityTag,
   CAPABILITY_TAG_CONFIG
 } from '@/types/agent';
 import type { Project } from '@/types/project';
+import type { ModelConfig } from '@/types/model-config';
 
 export default function ProjectAgentsPage() {
   const router = useRouter();
@@ -71,22 +68,11 @@ export default function ProjectAgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<Agent[]>([]);
+  const [modelConfigs, setModelConfigs] = useState<ModelConfig[]>([]);
+  const [loadingConfigs, setLoadingConfigs] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [filterProject, setFilterProject] = useState<string>('all');
   
-  // 全局配置
-  const [globalConfig, setGlobalConfig] = useState<{
-    has_api_key: boolean;
-    default_base_url: string;
-    default_model: string;
-  }>({
-    has_api_key: false,
-    default_base_url: 'https://api.coze.cn',
-    default_model: 'doubao-seed-1-8-251228'
-  });
-  
-  // 是否使用自定义配置
-  const [useCustomConfig, setUseCustomConfig] = useState(false);
   // 是否从模板创建
   const [createFromTemplate, setCreateFromTemplate] = useState(false);
   
@@ -99,8 +85,12 @@ export default function ProjectAgentsPage() {
     project_id: string | null;
     template_id: string | null;
     // LLM配置
+    model_config_id: string;
     model: string;
-    model_config: ModelConfig;
+    temperature: number;
+    max_tokens: number;
+    thinking: 'enabled' | 'disabled';
+    caching: 'enabled' | 'disabled';
     // 进程配置
     process_command: string;
     process_args: string;
@@ -116,12 +106,12 @@ export default function ProjectAgentsPage() {
     agent_type: 'llm',
     project_id: null,
     template_id: null,
-    model: 'doubao-seed-1-8-251228',
-    model_config: {
-      temperature: 0.3,
-      thinking: 'enabled',
-      caching: 'enabled'
-    },
+    model_config_id: '',
+    model: '',
+    temperature: 0.3,
+    max_tokens: 2048,
+    thinking: 'enabled',
+    caching: 'enabled',
     process_command: '',
     process_args: '',
     process_env: '',
@@ -130,15 +120,10 @@ export default function ProjectAgentsPage() {
     capability_tags: []
   });
 
-  // 自定义模型配置
-  const [customModelUrl, setCustomModelUrl] = useState('');
-  const [customApiKey, setCustomApiKey] = useState('');
-
   useEffect(() => {
     fetchAgents();
     fetchProjects();
     fetchTemplates();
-    fetchGlobalConfig();
     
     // 如果有模板ID参数，打开创建对话框
     if (templateId) {
@@ -148,20 +133,38 @@ export default function ProjectAgentsPage() {
     }
   }, [templateId]);
 
-  const fetchGlobalConfig = async () => {
+  useEffect(() => {
+    if (isCreateDialogOpen && formData.agent_type === 'llm') {
+      fetchModelConfigs();
+    }
+  }, [isCreateDialogOpen, formData.agent_type]);
+
+  const fetchModelConfigs = async () => {
     try {
-      const response = await fetch('/api/config');
+      setLoadingConfigs(true);
+      const response = await fetch('/api/model-configs');
       const result = await response.json();
       
       if (result.success) {
-        setGlobalConfig({
-          has_api_key: !!result.data.llm.default_api_key,
-          default_base_url: result.data.llm.default_base_url,
-          default_model: result.data.llm.default_model
-        });
+        setModelConfigs(result.data || []);
+        // 默认选择第一个配置
+        if (result.data?.length > 0 && !formData.model_config_id) {
+          const firstConfig = result.data[0];
+          setFormData(prev => ({
+            ...prev,
+            model_config_id: firstConfig.id,
+            model: firstConfig.default_model || '',
+            temperature: firstConfig.temperature || 0.3,
+            max_tokens: firstConfig.max_tokens || 2048,
+            thinking: (firstConfig.thinking as 'enabled' | 'disabled') || 'disabled',
+            caching: (firstConfig.caching as 'enabled' | 'disabled') || 'enabled'
+          }));
+        }
       }
     } catch (error) {
-      console.error('获取全局配置失败:', error);
+      console.error('获取大模型配置失败:', error);
+    } finally {
+      setLoadingConfigs(false);
     }
   };
 
@@ -212,20 +215,40 @@ export default function ProjectAgentsPage() {
       
       if (result.success && result.data) {
         const template = result.data;
-        setFormData({
-          ...formData,
+        setFormData(prev => ({
+          ...prev,
           name: template.name + ' (实例)',
           role: template.role,
           system_prompt: template.system_prompt,
           agent_type: template.agent_type,
           template_id: template.id,
-          model: template.model || 'doubao-seed-1-8-251228',
-          model_config: template.model_config || formData.model_config,
+          model_config_id: template.model_config_id || '',
+          model: template.model || '',
+          temperature: template.model_config?.temperature || 0.3,
+          max_tokens: template.model_config?.max_tokens || 2048,
+          thinking: (template.model_config?.thinking as 'enabled' | 'disabled') || 'enabled',
+          caching: (template.model_config?.caching as 'enabled' | 'disabled') || 'enabled',
           capability_tags: template.capability_tags || []
-        });
+        }));
       }
     } catch (error) {
       console.error('加载模板失败:', error);
+    }
+  };
+
+  // 选择大模型配置时
+  const handleModelConfigChange = (configId: string) => {
+    const config = modelConfigs.find(c => c.id === configId);
+    if (config) {
+      setFormData(prev => ({
+        ...prev,
+        model_config_id: configId,
+        model: config.default_model || '',
+        temperature: config.temperature || 0.3,
+        max_tokens: config.max_tokens || 2048,
+        thinking: (config.thinking as 'enabled' | 'disabled') || 'disabled',
+        caching: (config.caching as 'enabled' | 'disabled') || 'enabled'
+      }));
     }
   };
 
@@ -237,18 +260,12 @@ export default function ProjectAgentsPage() {
     }
     
     if (formData.agent_type === 'llm') {
+      if (!formData.model_config_id) {
+        alert('请选择大模型配置');
+        return;
+      }
       if (!formData.model) {
-        alert('请选择大模型');
-        return;
-      }
-      
-      if (!useCustomConfig && !globalConfig.has_api_key) {
-        alert('请先在全局设置中配置默认API Key，或在此处使用自定义配置');
-        return;
-      }
-      
-      if (useCustomConfig && !customApiKey) {
-        alert('使用自定义配置时，API Key 必填');
+        alert('请选择模型');
         return;
       }
     }
@@ -259,7 +276,7 @@ export default function ProjectAgentsPage() {
     }
 
     try {
-      const submitData: any = {
+      const submitData: Record<string, unknown> = {
         name: formData.name,
         role: formData.role,
         system_prompt: formData.system_prompt,
@@ -270,15 +287,14 @@ export default function ProjectAgentsPage() {
       };
       
       if (formData.agent_type === 'llm') {
+        submitData.model_config_id = formData.model_config_id;
         submitData.model = formData.model;
-        submitData.model_config = { ...formData.model_config };
-        
-        if (useCustomConfig) {
-          submitData.model_config.api_key = customApiKey;
-          if (customModelUrl) {
-            submitData.model_config.base_url = customModelUrl;
-          }
-        }
+        submitData.model_config = {
+          temperature: formData.temperature,
+          max_tokens: formData.max_tokens,
+          thinking: formData.thinking,
+          caching: formData.caching
+        };
       }
       
       if (formData.agent_type === 'process') {
@@ -326,12 +342,12 @@ export default function ProjectAgentsPage() {
       agent_type: 'llm',
       project_id: null,
       template_id: null,
-      model: 'doubao-seed-1-8-251228',
-      model_config: {
-        temperature: 0.3,
-        thinking: 'enabled',
-        caching: 'enabled'
-      },
+      model_config_id: '',
+      model: '',
+      temperature: 0.3,
+      max_tokens: 2048,
+      thinking: 'enabled',
+      caching: 'enabled',
       process_command: '',
       process_args: '',
       process_env: '',
@@ -339,8 +355,6 @@ export default function ProjectAgentsPage() {
       process_auto_restart: false,
       capability_tags: []
     });
-    setCustomModelUrl('');
-    setCustomApiKey('');
     setCreateFromTemplate(false);
   };
 
@@ -407,7 +421,7 @@ export default function ProjectAgentsPage() {
   };
 
   const getWorkStatusBadge = (workStatus: string) => {
-    const statusMap: Record<string, { label: string; className: string; icon: any }> = {
+    const statusMap: Record<string, { label: string; className: string; icon: typeof CheckCircle2 }> = {
       idle: { label: '空闲', className: 'bg-gray-100 text-gray-700', icon: CheckCircle2 },
       working: { label: '工作中', className: 'bg-blue-100 text-blue-700', icon: Play },
       error: { label: '异常', className: 'bg-red-100 text-red-700', icon: AlertCircle }
@@ -438,6 +452,12 @@ export default function ProjectAgentsPage() {
     if (!projectId) return '全局智能体';
     const project = projects.find(p => p.id === projectId);
     return project?.name || '未知项目';
+  };
+
+  // 获取选中配置的可用模型列表
+  const getAvailableModels = () => {
+    const config = modelConfigs.find(c => c.id === formData.model_config_id);
+    return config?.available_models || [];
   };
 
   return (
@@ -586,146 +606,145 @@ export default function ProjectAgentsPage() {
               {/* LLM配置 */}
               {formData.agent_type === 'llm' && (
                 <>
-                  {/* API配置选择 */}
-                  <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                  {/* 大模型配置选择 */}
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="font-medium">API 配置</Label>
-                        <p className="text-xs text-muted-foreground">
-                          {globalConfig.has_api_key 
-                            ? '全局配置已设置，可直接使用或覆盖'
-                            : '请先配置全局API Key，或使用自定义配置'}
+                      <Label className="flex items-center gap-2 text-base font-semibold">
+                        <Server className="h-4 w-4" />
+                        大模型配置
+                      </Label>
+                      <Link href="/model-configs" target="_blank">
+                        <Button variant="outline" size="sm">
+                          管理配置
+                          <ArrowRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                    
+                    {loadingConfigs ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : modelConfigs.length === 0 ? (
+                      <div className="p-4 border border-dashed rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground mb-3">
+                          暂无大模型配置，请先创建配置
                         </p>
+                        <Link href="/model-configs" target="_blank">
+                          <Button variant="outline" size="sm">
+                            <Plus className="h-4 w-4 mr-2" />
+                            创建大模型配置
+                          </Button>
+                        </Link>
                       </div>
-                      {globalConfig.has_api_key && (
-                        <Badge variant="outline" className="bg-green-50 text-green-700">
-                          全局配置可用
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={useCustomConfig}
-                        onCheckedChange={setUseCustomConfig}
-                      />
-                      <Label className="text-sm">使用自定义API配置</Label>
-                    </div>
-                    
-                    {!useCustomConfig && !globalConfig.has_api_key && (
-                      <div className="text-xs text-red-600 p-2 bg-red-50 dark:bg-red-950 rounded">
-                        未配置全局 API Key，请先在 
-                        <a href="/settings" className="underline">全局设置</a> 
-                        中配置，或启用自定义配置
-                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-2">
+                          <Label>选择配置 *</Label>
+                          <Select 
+                            value={formData.model_config_id} 
+                            onValueChange={handleModelConfigChange}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择大模型配置" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {modelConfigs.map(config => (
+                                <SelectItem key={config.id} value={config.id}>
+                                  {config.name} ({config.provider})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* 选择模型 */}
+                        <div className="space-y-2">
+                          <Label>选择模型 *</Label>
+                          <Select 
+                            value={formData.model} 
+                            onValueChange={(v) => setFormData({ ...formData, model: v })}
+                            disabled={!formData.model_config_id}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="选择模型" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {getAvailableModels().map(model => (
+                                <SelectItem key={model} value={model}>
+                                  {model}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {getAvailableModels().length === 0 && formData.model_config_id && (
+                            <p className="text-xs text-muted-foreground">
+                              该配置暂无可用模型列表，请手动输入模型名称
+                            </p>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
 
-                  {/* 自定义API配置 */}
-                  {useCustomConfig && (
-                    <div className="space-y-4 p-4 border rounded-lg bg-yellow-50 dark:bg-yellow-950">
-                      <h4 className="font-medium flex items-center gap-2">
-                        <Key className="h-4 w-4" />
-                        自定义 API 配置
-                      </h4>
-                      <div className="grid grid-cols-2 gap-4">
+                  {/* 模型参数配置 */}
+                  {formData.model_config_id && (
+                    <div className="space-y-4 p-4 border rounded-lg">
+                      <h4 className="font-medium">模型参数（可覆盖配置默认值）</h4>
+                      <div className="grid grid-cols-4 gap-4">
                         <div className="space-y-2">
-                          <Label>API Key *</Label>
+                          <Label>Temperature</Label>
                           <Input
-                            type="password"
-                            value={customApiKey}
-                            onChange={(e) => setCustomApiKey(e.target.value)}
-                            placeholder="sk-xxx"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="2"
+                            value={formData.temperature}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              temperature: parseFloat(e.target.value) 
+                            })}
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Base URL</Label>
+                          <Label>Max Tokens</Label>
                           <Input
-                            value={customModelUrl}
-                            onChange={(e) => setCustomModelUrl(e.target.value)}
-                            placeholder="https://api.coze.cn"
+                            type="number"
+                            min="1"
+                            value={formData.max_tokens}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              max_tokens: parseInt(e.target.value) 
+                            })}
                           />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>深度思考</Label>
+                          <div className="flex items-center h-10">
+                            <Switch
+                              checked={formData.thinking === 'enabled'}
+                              onCheckedChange={(checked) => setFormData({
+                                ...formData,
+                                thinking: checked ? 'enabled' : 'disabled' 
+                              })}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>缓存</Label>
+                          <div className="flex items-center h-10">
+                            <Switch
+                              checked={formData.caching === 'enabled'}
+                              onCheckedChange={(checked) => setFormData({
+                                ...formData,
+                                caching: checked ? 'enabled' : 'disabled' 
+                              })}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
                   )}
-
-                  {/* 选择大模型 */}
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Cpu className="h-4 w-4" />
-                      选择大模型
-                    </Label>
-                    <Select 
-                      value={formData.model} 
-                      onValueChange={(value) => setFormData({ ...formData, model: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择大模型" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {SUPPORTED_MODELS.map(m => (
-                          <SelectItem key={m.id} value={m.id}>
-                            {m.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* 模型参数配置 */}
-                  <div className="space-y-4 p-4 border rounded-lg">
-                    <h4 className="font-medium">模型参数</h4>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="space-y-2">
-                        <Label>Temperature</Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="2"
-                          value={formData.model_config.temperature}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            model_config: { 
-                              ...formData.model_config, 
-                              temperature: parseFloat(e.target.value) 
-                            }
-                          })}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>深度思考</Label>
-                        <div className="flex items-center h-10">
-                          <Switch
-                            checked={formData.model_config.thinking === 'enabled'}
-                            onCheckedChange={(checked) => setFormData({
-                              ...formData,
-                              model_config: { 
-                                ...formData.model_config, 
-                                thinking: checked ? 'enabled' : 'disabled' 
-                              }
-                            })}
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>缓存</Label>
-                        <div className="flex items-center h-10">
-                          <Switch
-                            checked={formData.model_config.caching === 'enabled'}
-                            onCheckedChange={(checked) => setFormData({
-                              ...formData,
-                              model_config: { 
-                                ...formData.model_config, 
-                                caching: checked ? 'enabled' : 'disabled' 
-                              }
-                            })}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </>
               )}
 

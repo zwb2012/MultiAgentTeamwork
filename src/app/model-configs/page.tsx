@@ -13,12 +13,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -30,7 +24,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -42,13 +35,13 @@ import {
   Plus,
   Edit,
   Trash2,
-  MoreHorizontal,
   CheckCircle2,
   XCircle,
   Loader2,
   Server,
   Eye,
-  EyeOff
+  EyeOff,
+  RefreshCw
 } from 'lucide-react';
 import type { 
   ModelConfig, 
@@ -65,10 +58,21 @@ export default function ModelConfigsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [showEdit, setShowEdit] = useState<ModelConfig | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [testingId, setTestingId] = useState<string | null>(null);
-  const [testResult, setTestResult] = useState<any>(null);
   
-  const [formData, setFormData] = useState<CreateModelConfigRequest & { showApiKey: boolean }>({
+  // 测试相关状态
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    latency?: number;
+    available_models?: string[];
+  } | null>(null);
+  
+  // 表单数据
+  const [formData, setFormData] = useState<CreateModelConfigRequest & { 
+    showApiKey: boolean;
+    availableModels: string[];
+  }>({
     name: '',
     provider: 'doubao',
     api_key: '',
@@ -78,7 +82,8 @@ export default function ModelConfigsPage() {
     max_tokens: 2048,
     thinking: 'disabled',
     caching: 'enabled',
-    showApiKey: false
+    showApiKey: false,
+    availableModels: []
   });
 
   useEffect(() => {
@@ -100,6 +105,52 @@ export default function ModelConfigsPage() {
     }
   };
 
+  // 测试连接并获取模型列表
+  const handleTest = async () => {
+    if (!formData.api_key || formData.api_key.includes('•')) {
+      alert('请先输入API Key');
+      return;
+    }
+    
+    setTesting(true);
+    setTestResult(null);
+    
+    try {
+      const response = await fetch('/api/model-configs/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: formData.provider,
+          api_key: formData.api_key,
+          base_url: formData.base_url || PROVIDER_CONFIG[formData.provider].defaultBaseUrl
+        })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setTestResult(result.data);
+        if (result.data.available_models && result.data.available_models.length > 0) {
+          setFormData(prev => ({
+            ...prev,
+            availableModels: result.data.available_models
+          }));
+        }
+      } else {
+        setTestResult({
+          success: false,
+          message: result.error || '测试失败'
+        });
+      }
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: error instanceof Error ? error.message : '测试失败'
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!formData.name || !formData.api_key) {
       alert('请填写名称和API Key');
@@ -110,7 +161,17 @@ export default function ModelConfigsPage() {
       const response = await fetch('/api/model-configs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          name: formData.name,
+          provider: formData.provider,
+          api_key: formData.api_key,
+          base_url: formData.base_url,
+          default_model: formData.default_model,
+          temperature: formData.temperature,
+          max_tokens: formData.max_tokens,
+          thinking: formData.thinking,
+          caching: formData.caching
+        })
       });
       
       const result = await response.json();
@@ -144,7 +205,6 @@ export default function ModelConfigsPage() {
         caching: formData.caching
       };
       
-      // 只有输入了新API Key才更新
       if (formData.api_key && !formData.api_key.includes('•')) {
         updateData.api_key = formData.api_key;
       }
@@ -191,39 +251,6 @@ export default function ModelConfigsPage() {
     }
   };
 
-  const handleTest = async (config: ModelConfig) => {
-    setTestingId(config.id);
-    setTestResult(null);
-    
-    try {
-      // 我们需要获取真实的API Key来测试，这里简化处理
-      // 实际应用中应该通过专门的测试API
-      const testData: any = {
-        provider: config.provider,
-        api_key: 'test-key', // 这里应该解密真实的key
-        base_url: config.base_url
-      };
-      
-      // 模拟测试结果
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setTestResult({
-        success: true,
-        message: '连接成功',
-        latency: 150,
-        available_models: PROVIDER_CONFIG[config.provider as ModelProvider].defaultModels
-      });
-    } catch (error) {
-      setTestResult({
-        success: false,
-        message: '连接失败',
-        latency: 0
-      });
-    } finally {
-      setTestingId(null);
-    }
-  };
-
   const openEdit = (config: ModelConfig) => {
     setShowEdit(config);
     setFormData({
@@ -234,10 +261,12 @@ export default function ModelConfigsPage() {
       default_model: config.default_model || '',
       temperature: config.temperature || 0.7,
       max_tokens: config.max_tokens || 2048,
-      thinking: config.thinking || 'disabled',
-      caching: config.caching || 'enabled',
-      showApiKey: false
+      thinking: (config.thinking as 'enabled' | 'disabled') || 'disabled',
+      caching: (config.caching as 'enabled' | 'disabled') || 'enabled',
+      showApiKey: false,
+      availableModels: config.available_models || []
     });
+    setTestResult(null);
   };
 
   const resetForm = () => {
@@ -251,7 +280,8 @@ export default function ModelConfigsPage() {
       max_tokens: 2048,
       thinking: 'disabled',
       caching: 'enabled',
-      showApiKey: false
+      showApiKey: false,
+      availableModels: []
     });
     setTestResult(null);
   };
@@ -261,8 +291,11 @@ export default function ModelConfigsPage() {
     setFormData(prev => ({
       ...prev,
       provider,
-      base_url: config.defaultBaseUrl
+      base_url: config.defaultBaseUrl,
+      availableModels: [],
+      default_model: ''
     }));
+    setTestResult(null);
   };
 
   return (
@@ -272,7 +305,7 @@ export default function ModelConfigsPage() {
         <div>
           <h1 className="text-3xl font-bold">大模型配置</h1>
           <p className="text-muted-foreground mt-1">
-            管理大模型API配置，支持多个提供商
+            管理大模型API配置，创建智能体时可直接选择使用
           </p>
         </div>
         <Button onClick={() => { resetForm(); setShowCreate(true); }}>
@@ -314,37 +347,19 @@ export default function ModelConfigsPage() {
                       </Badge>
                     </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEdit(config)}>
-                        <Edit className="h-4 w-4 mr-2" />
-                        编辑
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => handleTest(config)}
-                        disabled={testingId === config.id}
-                      >
-                        {testingId === config.id ? (
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-4 w-4 mr-2" />
-                        )}
-                        测试连接
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-red-600"
-                        onClick={() => setDeleteId(config.id)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => openEdit(config)}>
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-red-600"
+                      onClick={() => setDeleteId(config.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -358,52 +373,17 @@ export default function ModelConfigsPage() {
                   {config.last_tested_at && (
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>上次测试:</span>
-                      <span>
+                      <span className="flex items-center gap-1">
                         {config.test_result?.success ? (
-                          <CheckCircle2 className="h-4 w-4 inline mr-1 text-green-500" />
+                          <CheckCircle2 className="h-3 w-3 text-green-500" />
                         ) : config.test_result ? (
-                          <XCircle className="h-4 w-4 inline mr-1 text-red-500" />
+                          <XCircle className="h-3 w-3 text-red-500" />
                         ) : null}
-                        {new Date(config.last_tested_at).toLocaleString('zh-CN')}
+                        {new Date(config.last_tested_at).toLocaleDateString('zh-CN')}
                       </span>
                     </div>
                   )}
                 </div>
-                
-                {testResult && testingId === null && (
-                  <div className={`mt-4 p-3 rounded-lg text-sm ${
-                    testResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      {testResult.success ? (
-                        <CheckCircle2 className="h-4 w-4" />
-                      ) : (
-                        <XCircle className="h-4 w-4" />
-                      )}
-                      <span>{testResult.message}</span>
-                    </div>
-                    {testResult.latency && (
-                      <div className="text-xs mt-1">延迟: {testResult.latency}ms</div>
-                    )}
-                    {testResult.available_models && (
-                      <div className="mt-2">
-                        <div className="text-xs font-medium mb-1">可用模型:</div>
-                        <div className="flex flex-wrap gap-1">
-                          {testResult.available_models.slice(0, 5).map((model: string) => (
-                            <Badge key={model} variant="outline" className="text-xs">
-                              {model}
-                            </Badge>
-                          ))}
-                          {testResult.available_models.length > 5 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{testResult.available_models.length - 5}
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
           ))}
@@ -421,22 +401,23 @@ export default function ModelConfigsPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{showEdit ? '编辑配置' : '创建配置'}</DialogTitle>
             <DialogDescription>
-              配置大模型API连接信息
+              配置大模型API连接信息，测试成功后可选择模型
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
+            {/* 基本信息 */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>名称 *</Label>
+                <Label>配置名称 *</Label>
                 <Input 
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="配置名称"
+                  placeholder="例如：豆包生产环境"
                 />
               </div>
               <div className="space-y-2">
@@ -458,29 +439,35 @@ export default function ModelConfigsPage() {
               </div>
             </div>
             
+            {/* API配置 */}
             <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                API Key *
-              </Label>
+              <Label>API Key *</Label>
               <div className="flex gap-2">
-                <Input 
-                  type={formData.showApiKey ? 'text' : 'password'}
-                  value={formData.api_key}
-                  onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-                  placeholder={showEdit ? "留空则不修改" : "API Key"}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setFormData({ ...formData, showApiKey: !formData.showApiKey })}
-                >
-                  {formData.showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
+                <div className="relative flex-1">
+                  <Input 
+                    type={formData.showApiKey ? 'text' : 'password'}
+                    value={formData.api_key}
+                    onChange={(e) => {
+                      setFormData({ ...formData, api_key: e.target.value });
+                      setTestResult(null);
+                    }}
+                    placeholder={showEdit ? "留空则不修改" : "输入API Key"}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-0 top-0 h-full px-3"
+                    onClick={() => setFormData({ ...formData, showApiKey: !formData.showApiKey })}
+                  >
+                    {formData.showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                </div>
               </div>
               {!showEdit && (
                 <p className="text-xs text-muted-foreground">
-                  API Key将被加密存储
+                  API Key将被加密存储，创建智能体时可直接选择此配置
                 </p>
               )}
             </div>
@@ -489,29 +476,78 @@ export default function ModelConfigsPage() {
               <Label>Base URL</Label>
               <Input 
                 value={formData.base_url}
-                onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, base_url: e.target.value });
+                  setTestResult(null);
+                }}
                 placeholder={PROVIDER_CONFIG[formData.provider].defaultBaseUrl}
               />
+              <p className="text-xs text-muted-foreground">
+                默认: {PROVIDER_CONFIG[formData.provider].defaultBaseUrl}
+              </p>
             </div>
             
-            <div className="space-y-2">
-              <Label>默认模型</Label>
-              <Select 
-                value={formData.default_model} 
-                onValueChange={(v) => setFormData({ ...formData, default_model: v })}
+            {/* 测试连接 */}
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="outline" 
+                onClick={handleTest}
+                disabled={testing || !formData.api_key || formData.api_key.includes('•')}
               >
-                <SelectTrigger><SelectValue placeholder="选择默认模型" /></SelectTrigger>
-                <SelectContent>
-                  {PROVIDER_CONFIG[formData.provider].defaultModels.map((model) => (
-                    <SelectItem key={model} value={model}>
-                      {model}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {testing ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                )}
+                测试连接
+              </Button>
+              
+              {testResult && (
+                <div className={`flex items-center gap-2 text-sm ${
+                  testResult.success ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {testResult.success ? (
+                    <CheckCircle2 className="h-4 w-4" />
+                  ) : (
+                    <XCircle className="h-4 w-4" />
+                  )}
+                  <span>{testResult.message}</span>
+                  {testResult.latency && (
+                    <span className="text-muted-foreground">({testResult.latency}ms)</span>
+                  )}
+                </div>
+              )}
             </div>
             
-            <div className="grid grid-cols-3 gap-4">
+            {/* 模型选择 - 测试成功后显示 */}
+            {testResult?.success && testResult.available_models && testResult.available_models.length > 0 && (
+              <div className="space-y-2 p-4 bg-green-50 dark:bg-green-950 rounded-lg">
+                <Label className="text-green-700 dark:text-green-300">
+                  可用模型 ({testResult.available_models.length}个)
+                </Label>
+                <Select 
+                  value={formData.default_model} 
+                  onValueChange={(v) => setFormData({ ...formData, default_model: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择默认模型" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {testResult.available_models.map((model) => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  选择一个默认模型，创建智能体时可以覆盖
+                </p>
+              </div>
+            )}
+            
+            {/* 高级参数 */}
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t">
               <div className="space-y-2">
                 <Label>Temperature</Label>
                 <Input 
@@ -533,10 +569,10 @@ export default function ModelConfigsPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Thinking Mode</Label>
+                <Label>Thinking</Label>
                 <Select 
                   value={formData.thinking} 
-                  onValueChange={(v: any) => setFormData({ ...formData, thinking: v })}
+                  onValueChange={(v: 'enabled' | 'disabled') => setFormData({ ...formData, thinking: v })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>

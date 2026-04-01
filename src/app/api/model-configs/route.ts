@@ -42,8 +42,8 @@ export async function GET(request: NextRequest) {
 // POST /api/model-configs - 创建模型配置
 export async function POST(request: NextRequest) {
   try {
-    const body: CreateModelConfigRequest = await request.json();
-    const { name, provider, api_key, base_url, default_model, ...otherParams } = body;
+    const body: CreateModelConfigRequest & { available_models?: string[] } = await request.json();
+    const { name, provider, api_key, base_url, default_model, available_models, ...otherParams } = body;
     
     if (!name || !provider || !api_key) {
       return NextResponse.json(
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         api_key: await encrypt(api_key),
         base_url,
         default_model,
+        available_models: available_models || null,
         temperature: otherParams.temperature,
         max_tokens: otherParams.max_tokens,
         thinking: otherParams.thinking,

@@ -111,6 +111,7 @@ export interface Agent {
   template_id?: string;       // 从哪个模板创建的
   
   // 大模型配置
+  model_config_id?: string;   // 关联大模型配置（新方式）
   model?: string;
   model_config?: ModelConfig;
   
