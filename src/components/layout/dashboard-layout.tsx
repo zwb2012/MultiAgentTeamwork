@@ -74,8 +74,20 @@ const navItems: NavItem[] = [
   },
   {
     title: '会话中心',
-    href: '/conversations',
-    icon: <MessageSquare className="h-5 w-5" />
+    href: '#',
+    icon: <MessageSquare className="h-5 w-5" />,
+    children: [
+      {
+        title: '全部会话',
+        href: '/conversations',
+        icon: <MessageSquare className="h-4 w-4" />
+      },
+      {
+        title: '项目会话',
+        href: '/project-conversations',
+        icon: <FolderOpen className="h-4 w-4" />
+      }
+    ]
   },
   {
     title: '流水线',
@@ -101,7 +113,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '会话中心']);
 
   const toggleExpand = (title: string) => {
     setExpandedItems(prev =>

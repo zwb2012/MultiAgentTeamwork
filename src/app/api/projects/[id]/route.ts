@@ -165,7 +165,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/projects/[id] - 删除项目（软删除）
+// DELETE /api/projects/[id] - 删除项目（级联删除关联资源）
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -174,13 +174,127 @@ export async function DELETE(
     const { id: projectId } = await params;
     const client = getSupabaseClient();
     
-    // 软删除
+    // 1. 删除流水线相关的执行记录和节点
+    // 获取项目关联的流水线
+    const { data: projectPipelines } = await client
+      .from('pipelines')
+      .select('id')
+      .eq('project_id', projectId);
+    
+    if (projectPipelines && projectPipelines.length > 0) {
+      const pipelineIds = projectPipelines.map(p => p.id);
+      
+      // 删除流水线节点执行记录
+      for (const pipelineId of pipelineIds) {
+        // 获取流水线运行记录
+        const { data: runs } = await client
+          .from('pipeline_runs')
+          .select('id')
+          .eq('pipeline_id', pipelineId);
+        
+        if (runs && runs.length > 0) {
+          const runIds = runs.map(r => r.id);
+          
+          // 删除节点执行记录
+          await client
+            .from('pipeline_node_runs')
+            .delete()
+            .in('pipeline_run_id', runIds);
+        }
+        
+        // 删除流水线运行记录
+        await client
+          .from('pipeline_runs')
+          .delete()
+          .eq('pipeline_id', pipelineId);
+        
+        // 删除流水线节点
+        await client
+          .from('pipeline_nodes')
+          .delete()
+          .eq('pipeline_id', pipelineId);
+      }
+      
+      // 删除流水线
+      await client
+        .from('pipelines')
+        .delete()
+        .eq('project_id', projectId);
+    }
+    
+    // 2. 删除会话相关数据（消息和参与者会通过外键级联删除）
+    // 获取项目关联的会话
+    const { data: projectConversations } = await client
+      .from('conversations')
+      .select('id')
+      .eq('project_id', projectId);
+    
+    if (projectConversations && projectConversations.length > 0) {
+      const conversationIds = projectConversations.map(c => c.id);
+      
+      // 删除消息
+      await client
+        .from('messages')
+        .delete()
+        .in('conversation_id', conversationIds);
+      
+      // 删除参与者
+      await client
+        .from('conversation_participants')
+        .delete()
+        .in('conversation_id', conversationIds);
+      
+      // 删除会话
+      await client
+        .from('conversations')
+        .delete()
+        .eq('project_id', projectId);
+    }
+    
+    // 3. 删除工单历史
+    const { data: projectTickets } = await client
+      .from('tickets')
+      .select('id')
+      .eq('project_id', projectId);
+    
+    if (projectTickets && projectTickets.length > 0) {
+      const ticketIds = projectTickets.map(t => t.id);
+      
+      // 删除工单历史
+      await client
+        .from('ticket_history')
+        .delete()
+        .in('ticket_id', ticketIds);
+      
+      // 删除工单
+      await client
+        .from('tickets')
+        .delete()
+        .eq('project_id', projectId);
+    }
+    
+    // 4. 删除任务
+    await client
+      .from('tasks')
+      .delete()
+      .eq('project_id', projectId);
+    
+    // 5. 删除智能体
+    await client
+      .from('agents')
+      .delete()
+      .eq('project_id', projectId);
+    
+    // 6. 删除项目同步历史
+    await client
+      .from('project_sync_history')
+      .delete()
+      .eq('project_id', projectId);
+    
+    // 7. 最后删除项目本身
     const { error } = await client
       .from('projects')
-      .update({ 
-        is_active: false,
-        updated_at: new Date()
-      })
+      .delete()
       .eq('id', projectId);
     
     if (error) {
@@ -189,7 +303,7 @@ export async function DELETE(
     
     return NextResponse.json({ 
       success: true, 
-      message: '项目已删除' 
+      message: '项目及其所有关联资源已删除' 
     });
   } catch (error) {
     console.error('删除项目失败:', error);

@@ -287,15 +287,15 @@ export default function ProjectsPage() {
       <AlertDialog open={!!deleteProjectId} onOpenChange={() => setDeleteProjectId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogTitle>确认删除项目</AlertDialogTitle>
             <AlertDialogDescription>
-              确定要删除这个项目吗？此操作不可撤销。
+              确定要删除这个项目吗？此操作将同时删除项目下的所有智能体、流水线、会话、工单等关联资源，且不可撤销。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
-              删除
+              确认删除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

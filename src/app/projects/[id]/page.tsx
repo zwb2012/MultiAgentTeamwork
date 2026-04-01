@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -23,18 +22,10 @@ import {
   Loader2,
   RefreshCw,
   Save,
-  Monitor,
-  Folder,
-  Users,
-  GitPullRequest,
-  Ticket,
-  MessageSquare,
-  Plus,
-  Copy
+  Folder
 } from 'lucide-react';
 import type { Project, LocalPathConfig } from '@/types/project';
-import { SYNC_STATUS_CONFIG, SYNC_INTERVAL_OPTIONS, PLATFORM_CONFIG } from '@/types/project';
-import type { Agent } from '@/types/agent';
+import { SYNC_STATUS_CONFIG, SYNC_INTERVAL_OPTIONS } from '@/types/project';
 import { LocalPathConfigInput } from '../components/local-path-config';
 
 export default function EditProjectPage() {
@@ -47,12 +38,6 @@ export default function EditProjectPage() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  
-  // 项目关联数据
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [templates, setTemplates] = useState<Agent[]>([]);
-  const [loadingAgents, setLoadingAgents] = useState(false);
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -67,8 +52,6 @@ export default function EditProjectPage() {
 
   useEffect(() => {
     fetchProject();
-    fetchProjectAgents();
-    fetchTemplates();
   }, [projectId]);
 
   const fetchProject = async () => {
@@ -98,59 +81,6 @@ export default function EditProjectPage() {
       console.error('获取项目失败:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchProjectAgents = async () => {
-    try {
-      setLoadingAgents(true);
-      const response = await fetch(`/api/projects/${projectId}/agents`);
-      const result = await response.json();
-      
-      if (result.success) {
-        setAgents(result.data || []);
-      }
-    } catch (error) {
-      console.error('获取项目智能体失败:', error);
-    } finally {
-      setLoadingAgents(false);
-    }
-  };
-
-  const fetchTemplates = async () => {
-    try {
-      setLoadingTemplates(true);
-      const response = await fetch('/api/agents?is_template=true');
-      const result = await response.json();
-      
-      if (result.success) {
-        setTemplates(result.data || []);
-      }
-    } catch (error) {
-      console.error('获取智能体模板失败:', error);
-    } finally {
-      setLoadingTemplates(false);
-    }
-  };
-
-  const handleAddFromTemplate = async (templateId: string) => {
-    try {
-      const response = await fetch(`/api/projects/${projectId}/agents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ template_ids: [templateId] })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        fetchProjectAgents();
-      } else {
-        alert('创建失败: ' + result.error);
-      }
-    } catch (error) {
-      console.error('创建智能体失败:', error);
-      alert('创建失败');
     }
   };
 
@@ -283,18 +213,6 @@ export default function EditProjectPage() {
       <Tabs defaultValue="settings" className="space-y-6">
         <TabsList>
           <TabsTrigger value="settings">基本设置</TabsTrigger>
-          <TabsTrigger value="agents">
-            <Users className="h-4 w-4 mr-1" />
-            智能体
-          </TabsTrigger>
-          <TabsTrigger value="pipelines">
-            <GitPullRequest className="h-4 w-4 mr-1" />
-            流水线
-          </TabsTrigger>
-          <TabsTrigger value="tickets">
-            <Ticket className="h-4 w-4 mr-1" />
-            工单
-          </TabsTrigger>
           <TabsTrigger value="sync">同步状态</TabsTrigger>
         </TabsList>
 
@@ -456,146 +374,6 @@ export default function EditProjectPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        <TabsContent value="agents">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    项目智能体
-                  </CardTitle>
-                  <CardDescription>
-                    为此项目配置专属智能体，拥有独立的记忆空间
-                  </CardDescription>
-                </div>
-                <Link href={`/agents/new?project_id=${projectId}`}>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    创建智能体
-                  </Button>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* 从模板添加 */}
-              {templates.length > 0 && (
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">从模板快速添加</Label>
-                  <div className="flex flex-wrap gap-2">
-                    {templates.map(template => (
-                      <Button
-                        key={template.id}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleAddFromTemplate(template.id)}
-                        className="flex items-center gap-2"
-                      >
-                        <Copy className="h-3 w-3" />
-                        {template.name}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    点击模板名称即可从模板创建项目专属智能体
-                  </p>
-                </div>
-              )}
-              
-              <Separator />
-              
-              {/* 已有智能体列表 */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">当前智能体 ({agents.length})</Label>
-                
-                {loadingAgents ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                  </div>
-                ) : agents.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>暂无智能体</p>
-                    <p className="text-sm mt-1">从模板添加或创建新智能体</p>
-                  </div>
-                ) : (
-                  <div className="grid gap-3">
-                    {agents.map(agent => (
-                      <div 
-                        key={agent.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                            <Users className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <div className="font-medium">{agent.name}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {agent.role} · {agent.agent_type === 'llm' ? agent.model : '进程'}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={agent.online_status === 'online' ? 'default' : 'secondary'}>
-                            {agent.online_status === 'online' ? '在线' : 
-                             agent.online_status === 'offline' ? '离线' : '未知'}
-                          </Badge>
-                          <Link href={`/agents/${agent.id}`}>
-                            <Button variant="ghost" size="sm">详情</Button>
-                          </Link>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="pipelines">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <GitPullRequest className="h-5 w-5" />
-                项目流水线
-              </CardTitle>
-              <CardDescription>
-                为此项目配置自动化工作流程
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <GitPullRequest className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>暂无流水线</p>
-                <p className="text-sm mt-1">创建流水线来自动化项目工作流程</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="tickets">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Ticket className="h-5 w-5" />
-                项目工单
-              </CardTitle>
-              <CardDescription>
-                管理此项目的Bug、功能请求和改进任务
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Ticket className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>暂无工单</p>
-                <p className="text-sm mt-1">创建工单来跟踪项目问题和任务</p>
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         <TabsContent value="sync">
