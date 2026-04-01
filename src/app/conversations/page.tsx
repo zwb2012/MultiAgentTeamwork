@@ -604,9 +604,15 @@ export default function ConversationsPage() {
                                   className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background ${statusColor}`} 
                                   title={statusText}
                                 />
-                                {/* 悬浮显示状态 */}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                  {agent.name} - {statusText}
+                                {/* 悬浮显示状态和模型 */}
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1.5 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-max">
+                                  <div className="font-medium">{agent.name}</div>
+                                  <div className="text-muted-foreground">{statusText}</div>
+                                  {agent.model && (
+                                    <div className="text-muted-foreground text-[10px] mt-0.5">
+                                      模型: {agent.model}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             );

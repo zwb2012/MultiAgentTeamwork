@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -133,6 +133,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '会话中心', '系统设置']);
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleExpand = (title: string) => {
     setExpandedItems(prev =>
@@ -147,6 +148,62 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       return pathname === '/';
     }
     return pathname.startsWith(href);
+  };
+
+  // 定时健康检查
+  useEffect(() => {
+    // 获取配置并设置定时健康检查
+    const setupHealthCheck = async () => {
+      try {
+        const response = await fetch('/api/config');
+        const result = await response.json();
+        
+        if (result.success && result.data?.settings?.health_check_interval > 0) {
+          const intervalMinutes = result.data.settings.health_check_interval;
+          const intervalMs = intervalMinutes * 60 * 1000;
+          
+          // 立即执行一次健康检查（如果启用了自动检查）
+          if (result.data.settings.auto_health_check) {
+            performHealthCheck();
+          }
+          
+          // 设置定时检查
+          healthCheckIntervalRef.current = setInterval(() => {
+            performHealthCheck();
+          }, intervalMs);
+          
+          console.log(`定时健康检查已启动，间隔: ${intervalMinutes} 分钟`);
+        }
+      } catch (error) {
+        console.error('设置定时健康检查失败:', error);
+      }
+    };
+    
+    setupHealthCheck();
+    
+    return () => {
+      if (healthCheckIntervalRef.current) {
+        clearInterval(healthCheckIntervalRef.current);
+      }
+    };
+  }, []);
+  
+  // 执行批量健康检查
+  const performHealthCheck = async () => {
+    try {
+      const response = await fetch('/api/agents/health-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ check_type: 'scheduled' })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        console.log(`定时健康检查完成: ${result.data.online}/${result.data.checked} 在线`);
+      }
+    } catch (error) {
+      console.error('定时健康检查失败:', error);
+    }
   };
 
   return (
