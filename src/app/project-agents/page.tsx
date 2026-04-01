@@ -507,26 +507,40 @@ export default function ProjectAgentsPage() {
               </div>
               
               {/* 选择模板 */}
-              {createFromTemplate && templates.length > 0 && (
+              {createFromTemplate && (
                 <div className="space-y-2">
                   <Label>选择模板</Label>
-                  <Select
-                    value={formData.template_id || ''}
-                    onValueChange={(value) => {
-                      if (value) loadTemplate(value);
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择模板" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map(t => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name} ({t.agent_type === 'llm' ? 'LLM' : '进程'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {templates.length === 0 ? (
+                    <div className="p-4 border border-dashed rounded-lg text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        暂无可用模板
+                      </p>
+                      <Link href="/agent-templates" target="_blank">
+                        <Button variant="outline" size="sm">
+                          去创建模板
+                          <ArrowRight className="h-3 w-3 ml-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.template_id || ''}
+                      onValueChange={(value) => {
+                        if (value) loadTemplate(value);
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择模板" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name} ({t.agent_type === 'llm' ? 'LLM' : '进程'})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
               

@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
   Plus,
   Edit,
@@ -72,6 +73,7 @@ export default function ModelConfigsPage() {
   const [formData, setFormData] = useState<CreateModelConfigRequest & { 
     showApiKey: boolean;
     availableModels: string[];
+    enableTokenLimit: boolean;
   }>({
     name: '',
     provider: 'doubao',
@@ -79,11 +81,12 @@ export default function ModelConfigsPage() {
     base_url: '',
     default_model: '',
     temperature: 0.7,
-    max_tokens: 2048,
+    max_tokens: undefined,
     thinking: 'disabled',
     caching: 'enabled',
     showApiKey: false,
-    availableModels: []
+    availableModels: [],
+    enableTokenLimit: false
   });
 
   useEffect(() => {
@@ -168,7 +171,7 @@ export default function ModelConfigsPage() {
           base_url: formData.base_url,
           default_model: formData.default_model,
           temperature: formData.temperature,
-          max_tokens: formData.max_tokens,
+          max_tokens: formData.enableTokenLimit ? formData.max_tokens : undefined,
           thinking: formData.thinking,
           caching: formData.caching
         })
@@ -200,7 +203,7 @@ export default function ModelConfigsPage() {
         base_url: formData.base_url,
         default_model: formData.default_model,
         temperature: formData.temperature,
-        max_tokens: formData.max_tokens,
+        max_tokens: formData.enableTokenLimit ? formData.max_tokens : undefined,
         thinking: formData.thinking,
         caching: formData.caching
       };
@@ -260,11 +263,12 @@ export default function ModelConfigsPage() {
       base_url: config.base_url || '',
       default_model: config.default_model || '',
       temperature: config.temperature || 0.7,
-      max_tokens: config.max_tokens || 2048,
+      max_tokens: config.max_tokens || undefined,
       thinking: (config.thinking as 'enabled' | 'disabled') || 'disabled',
       caching: (config.caching as 'enabled' | 'disabled') || 'enabled',
       showApiKey: false,
-      availableModels: config.available_models || []
+      availableModels: config.available_models || [],
+      enableTokenLimit: !!config.max_tokens
     });
     setTestResult(null);
   };
@@ -277,11 +281,12 @@ export default function ModelConfigsPage() {
       base_url: '',
       default_model: '',
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: undefined,
       thinking: 'disabled',
       caching: 'enabled',
       showApiKey: false,
-      availableModels: []
+      availableModels: [],
+      enableTokenLimit: false
     });
     setTestResult(null);
   };
@@ -556,17 +561,34 @@ export default function ModelConfigsPage() {
                   max={2}
                   step={0.1}
                   value={formData.temperature}
-                  onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+                  onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) || 0.7 })}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Max Tokens</Label>
-                <Input 
-                  type="number"
-                  min={1}
-                  value={formData.max_tokens}
-                  onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
-                />
+                <div className="flex items-center justify-between">
+                  <Label>Token 限制</Label>
+                  <Switch
+                    checked={formData.enableTokenLimit}
+                    onCheckedChange={(checked) => setFormData({ 
+                      ...formData, 
+                      enableTokenLimit: checked,
+                      max_tokens: checked ? (formData.max_tokens || 4096) : undefined
+                    })}
+                  />
+                </div>
+                {formData.enableTokenLimit ? (
+                  <Input 
+                    type="number"
+                    min={1}
+                    value={formData.max_tokens || ''}
+                    onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) || undefined })}
+                    placeholder="如: 4096"
+                  />
+                ) : (
+                  <div className="h-10 flex items-center text-muted-foreground text-sm">
+                    不限制
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <Label>Thinking</Label>
