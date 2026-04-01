@@ -22,6 +22,8 @@ export async function GET(request: NextRequest) {
             id,
             name,
             role,
+            agent_type,
+            model,
             online_status,
             work_status
           )

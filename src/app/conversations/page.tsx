@@ -290,6 +290,21 @@ export default function ConversationsPage() {
     return colors[status || 'unknown'] || colors.unknown;
   };
 
+  // 获取角色标签
+  const getRoleLabel = (role?: string) => {
+    const roleMap: Record<string, string> = {
+      developer: '开发工程师',
+      frontend_dev: '前端工程师',
+      backend_dev: '后端工程师',
+      tester: '测试工程师',
+      reviewer: '代码审核',
+      architect: '架构师',
+      pm: '产品经理',
+      custom: '自定义'
+    };
+    return roleMap[role || 'developer'] || role || '开发工程师';
+  };
+
   // 获取项目名称
   const getProjectName = (projectId: string | null | undefined) => {
     if (!projectId) return null;
@@ -712,12 +727,20 @@ export default function ConversationsPage() {
                               className={cn("absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background", statusColor)} 
                               title={statusText}
                             />
-                            {/* 悬浮显示状态和模型 */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1.5 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-max">
-                              <div className="font-medium">{agent.name}</div>
-                              <div className="text-muted-foreground">{statusText}</div>
+                            {/* 悬浮显示详细信息 */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-3 py-2 bg-popover text-popover-foreground text-xs rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-max border">
+                              <div className="font-semibold text-sm mb-1">{agent.name}</div>
+                              <div className="text-muted-foreground flex items-center gap-1">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px]">
+                                  {getRoleLabel(agent.role)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className={cn("w-1.5 h-1.5 rounded-full", statusColor)} />
+                                <span className="text-muted-foreground">{statusText}</span>
+                              </div>
                               {agent.model && (
-                                <div className="text-muted-foreground text-[10px] mt-0.5">
+                                <div className="text-muted-foreground text-[10px] mt-1 pt-1 border-t border-border">
                                   模型: {agent.model}
                                 </div>
                               )}
