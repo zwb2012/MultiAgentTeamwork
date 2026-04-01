@@ -19,7 +19,9 @@ import {
   Bot,
   Copy,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  FolderCog,
+  FolderOpen
 } from 'lucide-react';
 
 interface NavItem {
@@ -55,8 +57,20 @@ const navItems: NavItem[] = [
   },
   {
     title: '项目管理',
-    href: '/projects',
-    icon: <FileCode className="h-5 w-5" />
+    href: '#',
+    icon: <FileCode className="h-5 w-5" />,
+    children: [
+      {
+        title: '项目设置',
+        href: '/projects',
+        icon: <FolderCog className="h-4 w-4" />
+      },
+      {
+        title: '项目资源',
+        href: '/project-resources',
+        icon: <FolderOpen className="h-4 w-4" />
+      }
+    ]
   },
   {
     title: '会话中心',
@@ -87,7 +101,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理']);
 
   const toggleExpand = (title: string) => {
     setExpandedItems(prev =>
