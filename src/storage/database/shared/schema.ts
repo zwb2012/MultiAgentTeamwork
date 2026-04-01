@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, integer, jsonb, index, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, integer, jsonb, index, serial, real } from "drizzle-orm/pg-core";
 
 // ==================== 大模型配置表 ====================
 export const model_configs = pgTable(
@@ -18,7 +18,7 @@ export const model_configs = pgTable(
     available_models: jsonb("available_models"), // string[]
     
     // 高级参数（默认值）
-    temperature: integer("temperature"),
+    temperature: real("temperature"), // 0-2，控制生成随机性
     max_tokens: integer("max_tokens"),
     thinking: varchar("thinking", { length: 20 }), // enabled, disabled
     caching: varchar("caching", { length: 20 }), // enabled, disabled
