@@ -11,13 +11,16 @@ import {
   Globe,
   Search,
   MoreVertical,
-  Trash2
+  Trash2,
+  Circle,
+  Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
   DialogContent,
@@ -35,13 +38,16 @@ import {
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Conversation, ConversationType } from '@/types/conversation';
+import type { Agent } from '@/types/agent';
 import type { Project } from '@/types/project';
 
 export default function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [agents, setAgents] = useState<any[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [conversationParticipants, setConversationParticipants] = useState<Record<string, Agent[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -56,10 +62,21 @@ export default function ConversationsPage() {
   });
 
   useEffect(() => {
-    fetchConversations();
-    fetchAgents();
-    fetchProjects();
+    fetchData();
   }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([
+        fetchConversations(),
+        fetchAgents(),
+        fetchProjects()
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchProjects = async () => {
     try {
@@ -81,11 +98,26 @@ export default function ConversationsPage() {
       
       if (result.success) {
         setConversations(result.data);
+        
+        // 从 conversation_participants 提取参与者信息
+        const participantsMap: Record<string, Agent[]> = {};
+        for (const conv of result.data || []) {
+          if (conv.conversation_participants && conv.conversation_participants.length > 0) {
+            // conversation_participants 结构: [{ agent_id, agents: { id, name, ... } }]
+            participantsMap[conv.id] = conv.conversation_participants
+              .filter((p: any) => p.agents)
+              .map((p: any) => ({
+                ...p.agents,
+                id: p.agent_id || p.agents.id
+              }));
+          } else {
+            participantsMap[conv.id] = [];
+          }
+        }
+        setConversationParticipants(participantsMap);
       }
     } catch (error) {
       console.error('获取会话列表失败:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -121,6 +153,7 @@ export default function ConversationsPage() {
         body: JSON.stringify({
           title: createForm.title,
           type: createForm.type,
+          project_id: createForm.project_id || null,
           agent_ids: createForm.selectedAgents
         })
       });
@@ -211,6 +244,23 @@ export default function ConversationsPage() {
     }
   };
 
+  // 获取在线状态颜色
+  const getOnlineColor = (status?: string) => {
+    const colors: Record<string, string> = {
+      online: 'bg-green-500',
+      offline: 'bg-red-500',
+      unknown: 'bg-gray-400'
+    };
+    return colors[status || 'unknown'] || colors.unknown;
+  };
+
+  // 获取项目名称
+  const getProjectName = (projectId: string | null | undefined) => {
+    if (!projectId) return null;
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || '未知项目';
+  };
+
   // 切换智能体选择
   const toggleAgentSelection = (agentId: string) => {
     setCreateForm(prev => ({
@@ -221,257 +271,323 @@ export default function ConversationsPage() {
     }));
   };
 
+  // 格式化时间
+  const formatTime = (dateString?: string) => {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    if (diff < 60000) return '刚刚';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
+    return date.toLocaleDateString('zh-CN');
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold">会话中心</h1>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <Link href="/">
-              <Button variant="ghost" size="sm">返回首页</Button>
-            </Link>
-          </div>
+    <div className="p-6 space-y-6">
+      {/* 页面标题 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">会话中心</h1>
+          <p className="text-muted-foreground mt-1">
+            管理多智能体对话会话，支持私聊、群组和流水线模式
+          </p>
         </div>
-      </header>
+        
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              新建会话
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>创建新会话</DialogTitle>
+              <DialogDescription>
+                选择会话类型并配置参与者
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 mt-4">
+              {/* 会话类型选择 */}
+              <div className="space-y-2">
+                <Label>会话类型</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { type: 'lobby', label: '大厅', icon: Globe, desc: '所有人可见' },
+                    { type: 'group', label: '群组', icon: Users, desc: '多智能体协作' },
+                    { type: 'private', label: '私聊', icon: User, desc: '1对1对话' }
+                  ].map(item => (
+                    <Card
+                      key={item.type}
+                      className={`cursor-pointer transition-all ${
+                        createForm.type === item.type 
+                          ? 'border-primary shadow-md' 
+                          : 'hover:border-primary/50'
+                      }`}
+                      onClick={() => setCreateForm(prev => ({ ...prev, type: item.type as ConversationType }))}
+                    >
+                      <CardContent className="p-3 text-center">
+                        <item.icon className="h-5 w-5 mx-auto text-primary mb-1" />
+                        <div className="font-medium text-sm">{item.label}</div>
+                        <div className="text-xs text-muted-foreground">{item.desc}</div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
 
-      <main className="container px-4 py-6">
-        {/* 搜索和操作栏 */}
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="搜索会话..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-          
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                新建会话
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>创建新会话</DialogTitle>
-                <DialogDescription>
-                  选择会话类型并配置参与者
-                </DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4 mt-4">
-                {/* 会话类型选择 */}
-                <div className="space-y-2">
-                  <Label>会话类型</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { type: 'lobby', label: '大厅', icon: Globe, desc: '所有人可见' },
-                      { type: 'group', label: '群组', icon: Users, desc: '多智能体协作' },
-                      { type: 'private', label: '私聊', icon: User, desc: '1对1对话' }
-                    ].map(item => (
-                      <Card
-                        key={item.type}
-                        className={`cursor-pointer transition-all ${
-                          createForm.type === item.type 
-                            ? 'border-primary shadow-md' 
-                            : 'hover:border-primary/50'
-                        }`}
-                        onClick={() => setCreateForm(prev => ({ ...prev, type: item.type as ConversationType }))}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-2">
-                            <item.icon className="h-5 w-5 text-primary" />
-                            <div>
-                              <div className="font-medium">{item.label}</div>
-                              <div className="text-xs text-muted-foreground">{item.desc}</div>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+              {/* 会话标题 */}
+              <div className="space-y-2">
+                <Label htmlFor="title">会话标题 *</Label>
+                <Input
+                  id="title"
+                  value={createForm.title}
+                  onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="输入会话标题"
+                />
+              </div>
+
+              {/* 项目选择 */}
+              <div className="space-y-2">
+                <Label>关联项目（可选）</Label>
+                <Select
+                  value={createForm.project_id || 'none'}
+                  onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v === 'none' ? null : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择项目" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">不关联项目</SelectItem>
+                    {projects.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
-                  </div>
-                </div>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                {/* 会话标题 */}
+              {/* 选择参与者 */}
+              {createForm.type !== 'lobby' && (
                 <div className="space-y-2">
-                  <Label htmlFor="title">会话标题</Label>
-                  <Input
-                    id="title"
-                    value={createForm.title}
-                    onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="输入会话标题"
-                  />
+                  <Label>选择参与者 *</Label>
+                  <ScrollArea className="h-48 border rounded-lg p-2">
+                    {agents.length === 0 ? (
+                      <div className="text-center text-muted-foreground py-4">
+                        暂无可用智能体
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {agents.map(agent => (
+                          <div
+                            key={agent.id}
+                            className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
+                            onClick={() => toggleAgentSelection(agent.id)}
+                          >
+                            <Checkbox
+                              checked={createForm.selectedAgents.includes(agent.id)}
+                              onCheckedChange={() => toggleAgentSelection(agent.id)}
+                            />
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-xs">
+                                <Bot className="h-3 w-3" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{agent.name}</div>
+                            </div>
+                            <span className={`w-2 h-2 rounded-full ${getOnlineColor(agent.online_status)}`} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                  {createForm.selectedAgents.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      已选择 {createForm.selectedAgents.length} 个参与者
+                    </p>
+                  )}
                 </div>
+              )}
 
-                {/* 选择参与者 */}
-                {createForm.type !== 'lobby' && (
-                  <div className="space-y-2">
-                    <Label>选择参与者</Label>
-                    <div className="max-h-48 overflow-y-auto border rounded-lg p-2">
-                      {agents.length === 0 ? (
-                        <div className="text-center text-muted-foreground py-4">
-                          暂无可用智能体
+              {/* 创建按钮 */}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  取消
+                </Button>
+                <Button onClick={handleCreateConversation}>
+                  创建
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* 搜索栏 */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="搜索会话..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Badge variant="outline">{filteredConversations.length} 个会话</Badge>
+      </div>
+
+      {/* 类型标签页 */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList>
+          <TabsTrigger value="all">全部</TabsTrigger>
+          <TabsTrigger value="lobby">
+            <Globe className="h-4 w-4 mr-1" />
+            大厅
+          </TabsTrigger>
+          <TabsTrigger value="private">
+            <User className="h-4 w-4 mr-1" />
+            私聊
+          </TabsTrigger>
+          <TabsTrigger value="group">
+            <Users className="h-4 w-4 mr-1" />
+            群组
+          </TabsTrigger>
+          <TabsTrigger value="pipeline">
+            <Bot className="h-4 w-4 mr-1" />
+            流水线
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={activeTab} className="mt-4">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="text-muted-foreground">加载中...</div>
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">暂无会话</p>
+                <Button
+                  variant="link"
+                  className="mt-2"
+                  onClick={() => setIsCreateDialogOpen(true)}
+                >
+                  创建第一个会话
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredConversations.map(conv => {
+                const participants = conversationParticipants[conv.id] || [];
+                const onlineCount = participants.filter(a => a.online_status === 'online').length;
+                const projectName = getProjectName(conv.project_id);
+                
+                return (
+                  <Card key={conv.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                    <Link href={`/conversations/${conv.id}`}>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-2">
+                            {getTypeIcon(conv.type)}
+                            <CardTitle className="text-lg hover:text-primary transition-colors">{conv.title}</CardTitle>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+                              <Button variant="ghost" size="sm">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href={`/conversations/${conv.id}`}>
+                                  进入会话
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleDeleteConversation(conv.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                删除
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {agents.map(agent => (
-                            <div
-                              key={agent.id}
-                              className="flex items-center gap-2 p-2 rounded hover:bg-muted cursor-pointer"
-                              onClick={() => toggleAgentSelection(agent.id)}
-                            >
-                              <Checkbox
-                                checked={createForm.selectedAgents.includes(agent.id)}
-                                onCheckedChange={() => toggleAgentSelection(agent.id)}
-                              />
-                              <div className="flex-1">
-                                <div className="font-medium">{agent.name}</div>
-                                <div className="text-xs text-muted-foreground">{agent.role}</div>
-                              </div>
-                              <Badge variant="outline">
-                                {agent.online_status || 'unknown'}
-                              </Badge>
+                        <div className="flex items-center gap-2 flex-wrap mt-2">
+                          <Badge variant="outline" className="text-xs">
+                            {getTypeLabel(conv.type)}
+                          </Badge>
+                          {projectName && (
+                            <Badge variant="secondary" className="text-xs">
+                              {projectName}
+                            </Badge>
+                          )}
+                          <Badge 
+                            variant="outline" 
+                            className={`text-xs ${onlineCount > 0 ? 'text-green-600 border-green-300' : 'text-muted-foreground'}`}
+                          >
+                            {onlineCount}/{participants.length} 在线
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {/* 参与者头像 */}
+                        <div className="flex items-center gap-1 mb-3">
+                          {participants.slice(0, 5).map((agent, idx) => (
+                            <div key={agent.id} className="relative -ml-2 first:ml-0">
+                              <Avatar className="h-7 w-7 border-2 border-background">
+                                <AvatarFallback className="text-xs bg-primary/10">
+                                  <Bot className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background ${getOnlineColor(agent.online_status)}`} />
                             </div>
                           ))}
+                          {participants.length > 5 && (
+                            <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium -ml-2 border-2 border-background">
+                              +{participants.length - 5}
+                            </div>
+                          )}
+                          {participants.length === 0 && (
+                            <span className="text-xs text-muted-foreground">暂无参与者</span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* 创建按钮 */}
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-                    取消
-                  </Button>
-                  <Button onClick={handleCreateConversation}>
-                    创建
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* 类型标签页 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-4">
-            <TabsTrigger value="all">全部</TabsTrigger>
-            <TabsTrigger value="lobby">
-              <Globe className="h-4 w-4 mr-1" />
-              大厅
-            </TabsTrigger>
-            <TabsTrigger value="private">
-              <User className="h-4 w-4 mr-1" />
-              私聊
-            </TabsTrigger>
-            <TabsTrigger value="group">
-              <Users className="h-4 w-4 mr-1" />
-              群组
-            </TabsTrigger>
-            <TabsTrigger value="pipeline">
-              <Bot className="h-4 w-4 mr-1" />
-              流水线
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value={activeTab}>
-            {isLoading ? (
-              <div className="text-center py-12">
-                <div className="text-muted-foreground">加载中...</div>
-              </div>
-            ) : filteredConversations.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">暂无会话</p>
-                  <Button
-                    variant="link"
-                    className="mt-2"
-                    onClick={() => setIsCreateDialogOpen(true)}
-                  >
-                    创建第一个会话
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {filteredConversations.map(conv => (
-                  <Card key={conv.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          {getTypeIcon(conv.type)}
-                          <CardTitle className="text-lg">{conv.title}</CardTitle>
-                        </div>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/conversations/${conv.id}`}>
-                                查看详情
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              className="text-destructive"
-                              onClick={() => handleDeleteConversation(conv.id)}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-xs">
-                          {getTypeLabel(conv.type)}
-                        </Badge>
-                        {conv.participants && (
-                          <Badge variant="secondary" className="text-xs">
-                            {conv.participants.length} 人
-                          </Badge>
+                        
+                        {/* 最后消息 */}
+                        {conv.last_message ? (
+                          <div className="text-sm text-muted-foreground line-clamp-2">
+                            <span className="font-medium">{conv.last_message.agent_name}:</span>{' '}
+                            {conv.last_message.content}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">
+                            暂无消息
+                          </div>
                         )}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      {conv.last_message ? (
-                        <div className="text-sm text-muted-foreground">
-                          <span className="font-medium">{conv.last_message.agent_name}:</span>{' '}
-                          {conv.last_message.content.length > 50 
-                            ? conv.last_message.content.substring(0, 50) + '...' 
-                            : conv.last_message.content}
+                        
+                        {/* 时间 */}
+                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          {formatTime(conv.updated_at || conv.created_at)}
                         </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">
-                          暂无消息
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Link href={`/conversations/${conv.id}`} className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full">
-                            进入会话
-                          </Button>
-                        </Link>
-                      </div>
-                    </CardContent>
+                      </CardContent>
+                    </Link>
                   </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </main>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

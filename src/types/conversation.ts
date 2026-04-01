@@ -43,22 +43,26 @@ export interface Conversation {
   type: ConversationType;
   status: ConversationStatus;
   
+  // 项目关联
+  project_id?: string;
+  
   // 配置
   config?: ConversationConfig;
   
-  // 元数据
-  created_at: string;
-  updated_at?: string;
-  
-  // 参与者（关联查询）
-  participants?: ConversationParticipant[];
+  // 参与者ID列表
+  participants?: string[];
   
   // 最后消息预览
   last_message?: {
     content: string;
+    agent_id?: string;
     agent_name: string;
-    created_at: string;
+    created_at?: string;
   };
+  
+  // 元数据
+  created_at: string;
+  updated_at?: string;
   
   // 未读消息数
   unread_count?: number;

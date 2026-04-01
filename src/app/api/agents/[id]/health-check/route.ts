@@ -243,7 +243,13 @@ async function checkLLMAgent(
       }
     } else {
       // 通用 OpenAI 兼容 API 测试
-      const response = await fetch(`${baseUrl}/v1/models`, {
+      // 处理 base_url：如果已经包含 /v1，则不再添加
+      let testUrl = baseUrl;
+      if (baseUrl.endsWith('/v1') || baseUrl.endsWith('/v1/')) {
+        testUrl = baseUrl.replace(/\/v1\/?$/, '');
+      }
+      
+      const response = await fetch(`${testUrl}/v1/models`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${apiKey}`,
