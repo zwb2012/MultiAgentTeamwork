@@ -98,38 +98,15 @@ export async function POST(request: NextRequest) {
       capability_tags 
     } = body;
     
-    // 参数校验
-    if (!name || !role || !system_prompt || !agent_type) {
-      return NextResponse.json(
-        { success: false, error: '缺少必要参数: name, role, system_prompt, agent_type' },
-        { status: 400 }
-      );
-    }
-    
-    // 根据类型校验
-    if (agent_type === 'llm') {
-      // 需要model_config_id或model
-      if (!model_config_id && !model) {
-        return NextResponse.json(
-          { success: false, error: 'LLM类型智能体必须指定大模型配置或模型' },
-          { status: 400 }
-        );
-      }
-    }
-    
-    if (agent_type === 'process' && !process_config?.command) {
-      return NextResponse.json(
-        { success: false, error: '进程类型智能体必须指定启动命令' },
-        { status: 400 }
-      );
-    }
-    
-    // 如果指定了template_id，从模板复制配置
+    // 先处理模板继承
+    let finalName = name;
+    let finalRole = role;
+    let finalAgentType = agent_type;
+    let finalSystemPrompt = system_prompt;
     let finalModelConfigId = model_config_id;
     let finalModel = model;
     let finalModelConfig = model_config;
     let finalProcessConfig = process_config;
-    let finalSystemPrompt = system_prompt;
     
     if (template_id) {
       const client = getSupabaseClient();
@@ -148,23 +125,52 @@ export async function POST(request: NextRequest) {
       }
       
       // 继承模板配置（如果未指定则使用模板的）
+      finalName = name || template.name;
+      finalRole = role || template.role;
+      finalAgentType = agent_type || template.agent_type;
+      finalSystemPrompt = system_prompt || template.system_prompt;
       finalModelConfigId = model_config_id || template.model_config_id;
       finalModel = model || template.model;
       finalModelConfig = model_config || template.model_config;
       finalProcessConfig = process_config || template.process_config;
-      finalSystemPrompt = system_prompt || template.system_prompt;
+    }
+    
+    // 参数校验（在模板继承之后）
+    if (!finalName || !finalRole || !finalSystemPrompt || !finalAgentType) {
+      return NextResponse.json(
+        { success: false, error: '缺少必要参数: name, role, system_prompt, agent_type' },
+        { status: 400 }
+      );
+    }
+    
+    // 根据类型校验
+    if (finalAgentType === 'llm') {
+      // 需要model_config_id或model
+      if (!finalModelConfigId && !finalModel) {
+        return NextResponse.json(
+          { success: false, error: 'LLM类型智能体必须指定大模型配置或模型' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    if (finalAgentType === 'process' && !finalProcessConfig?.command) {
+      return NextResponse.json(
+        { success: false, error: '进程类型智能体必须指定启动命令' },
+        { status: 400 }
+      );
     }
     
     // 替换系统提示词中的{name}占位符
-    finalSystemPrompt = finalSystemPrompt.replace(/{name}/g, name);
+    finalSystemPrompt = finalSystemPrompt.replace(/{name}/g, finalName);
     
     const client = getSupabaseClient();
     
     const insertData: Record<string, unknown> = {
-      name,
-      role: role as AgentRole,
+      name: finalName,
+      role: finalRole as AgentRole,
       system_prompt: finalSystemPrompt,
-      agent_type: agent_type as AgentType,
+      agent_type: finalAgentType as AgentType,
       // 项目关联
       project_id: project_id || null,
       is_template: is_template ?? false,
@@ -178,7 +184,7 @@ export async function POST(request: NextRequest) {
     };
     
     // LLM类型配置
-    if (agent_type === 'llm') {
+    if (finalAgentType === 'llm') {
       insertData.model = finalModel;
       if (finalModelConfigId) {
         insertData.model_config_id = finalModelConfigId;
@@ -189,7 +195,7 @@ export async function POST(request: NextRequest) {
     }
     
     // 进程类型配置
-    if (agent_type === 'process' && finalProcessConfig) {
+    if (finalAgentType === 'process' && finalProcessConfig) {
       insertData.process_config = finalProcessConfig as ProcessConfig;
     }
     
