@@ -36,7 +36,8 @@ import {
   Copy,
   Server,
   ArrowRight,
-  Loader2
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   AGENT_ROLE_TEMPLATES, 
@@ -66,12 +67,6 @@ export default function AgentTemplatesPage() {
     agent_type: AgentType;
     // LLM配置
     model_config_id: string;
-    model: string;
-    temperature: number;
-    max_tokens: number;
-    thinking: 'enabled' | 'disabled';
-    caching: 'enabled' | 'disabled';
-    // 能力标签
     capability_tags: CapabilityTag[];
   }>({
     name: '',
@@ -79,11 +74,6 @@ export default function AgentTemplatesPage() {
     system_prompt: '',
     agent_type: 'llm',
     model_config_id: '',
-    model: '',
-    temperature: 0.3,
-    max_tokens: 2048,
-    thinking: 'enabled',
-    caching: 'enabled',
     capability_tags: []
   });
 
@@ -107,15 +97,9 @@ export default function AgentTemplatesPage() {
         setModelConfigs(result.data || []);
         // 默认选择第一个配置
         if (result.data?.length > 0 && !formData.model_config_id) {
-          const firstConfig = result.data[0];
           setFormData(prev => ({
             ...prev,
-            model_config_id: firstConfig.id,
-            model: firstConfig.default_model || '',
-            temperature: firstConfig.temperature || 0.3,
-            max_tokens: firstConfig.max_tokens || 2048,
-            thinking: (firstConfig.thinking as 'enabled' | 'disabled') || 'disabled',
-            caching: (firstConfig.caching as 'enabled' | 'disabled') || 'enabled'
+            model_config_id: result.data[0].id
           }));
         }
       }
@@ -158,26 +142,7 @@ export default function AgentTemplatesPage() {
         name: template.name,
         role: template.role,
         system_prompt: template.system_prompt,
-        agent_type: template.agent_type,
-        model: template.suggested_model,
-        thinking: template.suggested_model_config.thinking || 'enabled',
-        caching: template.suggested_model_config.caching || 'enabled'
-      }));
-    }
-  };
-
-  // 选择大模型配置时
-  const handleModelConfigChange = (configId: string) => {
-    const config = modelConfigs.find(c => c.id === configId);
-    if (config) {
-      setFormData(prev => ({
-        ...prev,
-        model_config_id: configId,
-        model: config.default_model || '',
-        temperature: config.temperature || 0.3,
-        max_tokens: config.max_tokens || 2048,
-        thinking: (config.thinking as 'enabled' | 'disabled') || 'disabled',
-        caching: (config.caching as 'enabled' | 'disabled') || 'enabled'
+        agent_type: template.agent_type
       }));
     }
   };
@@ -194,10 +159,6 @@ export default function AgentTemplatesPage() {
         alert('请选择大模型配置');
         return;
       }
-      if (!formData.model) {
-        alert('请选择模型');
-        return;
-      }
     }
 
     try {
@@ -211,13 +172,17 @@ export default function AgentTemplatesPage() {
       
       if (formData.agent_type === 'llm') {
         submitData.model_config_id = formData.model_config_id;
-        submitData.model = formData.model;
-        submitData.model_config = {
-          temperature: formData.temperature,
-          max_tokens: formData.max_tokens,
-          thinking: formData.thinking,
-          caching: formData.caching
-        };
+        // 获取选中的配置信息
+        const selectedConfig = modelConfigs.find(c => c.id === formData.model_config_id);
+        if (selectedConfig) {
+          submitData.model = selectedConfig.default_model;
+          submitData.model_config = {
+            temperature: selectedConfig.temperature,
+            max_tokens: selectedConfig.max_tokens,
+            thinking: selectedConfig.thinking,
+            caching: selectedConfig.caching
+          };
+        }
       }
       
       if (formData.capability_tags.length > 0) {
@@ -252,11 +217,6 @@ export default function AgentTemplatesPage() {
       system_prompt: '',
       agent_type: 'llm',
       model_config_id: '',
-      model: '',
-      temperature: 0.3,
-      max_tokens: 2048,
-      thinking: 'enabled',
-      caching: 'enabled',
       capability_tags: []
     });
     setSelectedRole('developer');
@@ -297,10 +257,9 @@ export default function AgentTemplatesPage() {
     return <Badge variant="outline">{template?.name || role}</Badge>;
   };
 
-  // 获取选中配置的可用模型列表
-  const getAvailableModels = () => {
-    const config = modelConfigs.find(c => c.id === formData.model_config_id);
-    return config?.available_models || [];
+  // 获取选中配置的信息
+  const getSelectedConfigInfo = () => {
+    return modelConfigs.find(c => c.id === formData.model_config_id);
   };
 
   return (
@@ -415,7 +374,7 @@ export default function AgentTemplatesPage() {
                           <Label>选择配置 *</Label>
                           <Select 
                             value={formData.model_config_id} 
-                            onValueChange={handleModelConfigChange}
+                            onValueChange={(v) => setFormData({ ...formData, model_config_id: v })}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="选择大模型配置" />
@@ -430,93 +389,33 @@ export default function AgentTemplatesPage() {
                           </Select>
                         </div>
 
-                        {/* 选择模型 */}
-                        <div className="space-y-2">
-                          <Label>选择模型 *</Label>
-                          <Select 
-                            value={formData.model} 
-                            onValueChange={(v) => setFormData({ ...formData, model: v })}
-                            disabled={!formData.model_config_id}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="选择模型" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {getAvailableModels().map(model => (
-                                <SelectItem key={model} value={model}>
-                                  {model}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {getAvailableModels().length === 0 && formData.model_config_id && (
+                        {/* 显示选中配置的详情 */}
+                        {getSelectedConfigInfo() && (
+                          <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                            <div className="flex items-center gap-2 text-sm font-medium text-green-700 dark:text-green-300">
+                              <CheckCircle2 className="h-4 w-4" />
+                              已选择配置，将使用以下设置
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                              {getSelectedConfigInfo()?.default_model && (
+                                <div>默认模型: <span className="text-foreground">{getSelectedConfigInfo()?.default_model}</span></div>
+                              )}
+                              {getSelectedConfigInfo()?.temperature !== null && getSelectedConfigInfo()?.temperature !== undefined && (
+                                <div>Temperature: <span className="text-foreground">{getSelectedConfigInfo()?.temperature}</span></div>
+                              )}
+                              {getSelectedConfigInfo()?.max_tokens && (
+                                <div>Max Tokens: <span className="text-foreground">{getSelectedConfigInfo()?.max_tokens}</span></div>
+                              )}
+                              <div>Thinking: <span className="text-foreground">{getSelectedConfigInfo()?.thinking || 'disabled'}</span></div>
+                            </div>
                             <p className="text-xs text-muted-foreground">
-                              该配置暂无可用模型列表，请手动输入模型名称
+                              创建智能体实例时可以覆盖这些设置
                             </p>
-                          )}
-                        </div>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
-
-                  {/* 模型参数配置 */}
-                  {formData.model_config_id && (
-                    <div className="space-y-4 p-4 border rounded-lg">
-                      <h4 className="font-medium">模型参数（可覆盖配置默认值）</h4>
-                      <div className="grid grid-cols-4 gap-4">
-                        <div className="space-y-2">
-                          <Label>Temperature</Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            max="2"
-                            value={formData.temperature}
-                            onChange={(e) => setFormData({ 
-                              ...formData, 
-                              temperature: parseFloat(e.target.value) 
-                            })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Max Tokens</Label>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={formData.max_tokens}
-                            onChange={(e) => setFormData({ 
-                              ...formData, 
-                              max_tokens: parseInt(e.target.value) 
-                            })}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>深度思考</Label>
-                          <div className="flex items-center h-10">
-                            <Switch
-                              checked={formData.thinking === 'enabled'}
-                              onCheckedChange={(checked) => setFormData({
-                                ...formData,
-                                thinking: checked ? 'enabled' : 'disabled' 
-                              })}
-                            />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>缓存</Label>
-                          <div className="flex items-center h-10">
-                            <Switch
-                              checked={formData.caching === 'enabled'}
-                              onCheckedChange={(checked) => setFormData({
-                                ...formData,
-                                caching: checked ? 'enabled' : 'disabled' 
-                              })}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 
