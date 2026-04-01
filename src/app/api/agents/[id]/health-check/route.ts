@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { decrypt } from '@/lib/encryption';
 
 // POST /api/agents/[id]/health-check - 健康检查
 export async function POST(
@@ -36,6 +37,7 @@ export async function POST(
     let result: {
       online: boolean;
       message: string;
+      details?: string;
       latency: number;
       checked_at: string;
     } = {
@@ -48,8 +50,45 @@ export async function POST(
     const startTime = Date.now();
     
     if (agent.agent_type === 'llm') {
+      // 获取大模型配置
+      let modelConfig: {
+        api_key?: string;
+        base_url?: string;
+        provider?: string;
+        default_model?: string;
+      } = {};
+      
+      // 优先使用 model_config_id 关联的配置
+      if (agent.model_config_id) {
+        const { data: config, error: configError } = await supabase
+          .from('model_configs')
+          .select('*')
+          .eq('id', agent.model_config_id)
+          .single();
+        
+        if (!configError && config) {
+          const decryptedKey = config.api_key ? await decrypt(config.api_key) : undefined;
+          modelConfig = {
+            api_key: decryptedKey,
+            base_url: config.base_url || undefined,
+            provider: config.provider,
+            default_model: config.default_model || undefined
+          };
+        }
+      }
+      
+      // 兼容旧的 model_config 字段
+      if (!modelConfig.api_key && agent.model_config) {
+        const oldConfig = agent.model_config as any;
+        modelConfig = {
+          api_key: oldConfig.api_key,
+          base_url: oldConfig.base_url,
+          provider: oldConfig.provider
+        };
+      }
+      
       // LLM 类型健康检查
-      const checkResult = await checkLLMAgent(agent);
+      const checkResult = await checkLLMAgent(modelConfig, agent.model);
       result = {
         ...checkResult,
         latency: checkResult.latency || 0,
@@ -97,79 +136,181 @@ export async function POST(
 /**
  * 检查 LLM 智能体是否在线
  */
-async function checkLLMAgent(agent: any): Promise<{
+async function checkLLMAgent(
+  modelConfig: {
+    api_key?: string;
+    base_url?: string;
+    provider?: string;
+    default_model?: string;
+  },
+  model?: string
+): Promise<{
   online: boolean;
   message: string;
+  details?: string;
   latency?: number;
   checked_at?: string;
 }> {
   try {
-    const modelConfig = agent.model_config || {};
-    const apiKey = modelConfig.api_key || process.env.COZE_API_KEY;
-    const baseUrl = modelConfig.base_url || process.env.COZE_API_BASE_URL || 'https://api.coze.cn';
+    const apiKey = modelConfig.api_key;
+    let baseUrl = modelConfig.base_url;
+    const provider = modelConfig.provider;
+    
+    // 根据 provider 设置默认 base_url
+    if (!baseUrl) {
+      switch (provider) {
+        case 'doubao':
+        case 'coze':
+          baseUrl = 'https://api.coze.cn';
+          break;
+        case 'deepseek':
+          baseUrl = 'https://api.deepseek.com';
+          break;
+        case 'kimi':
+          baseUrl = 'https://api.moonshot.cn';
+          break;
+        case 'zhipu':
+          baseUrl = 'https://open.bigmodel.cn';
+          break;
+        case 'openai':
+          baseUrl = 'https://api.openai.com';
+          break;
+        default:
+          baseUrl = 'https://api.coze.cn';
+      }
+    }
     
     if (!apiKey) {
       return {
         online: false,
-        message: '未配置 API Key'
+        message: '未配置 API Key',
+        details: '请在智能体配置中设置 API Key 或关联大模型配置'
       };
     }
     
-    // 使用 fetch 发送简单的测试请求
-    const response = await fetch(`${baseUrl}/v1/chat`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        bot_id: 'health-check',
-        user_id: 'health-check',
-        additional_messages: [
-          { role: 'user', content: 'ping', content_type: 'text' }
-        ]
-      })
-    });
-    
-    if (response.ok) {
-      return {
-        online: true,
-        message: 'API 连接正常'
-      };
-    } else if (response.status === 401) {
-      return {
-        online: false,
-        message: 'API Key 无效'
-      };
-    } else if (response.status === 404) {
-      return {
-        online: false,
-        message: 'API 地址错误'
-      };
+    // 根据不同的 provider 进行测试
+    if (provider === 'doubao' || provider === 'coze' || baseUrl.includes('coze')) {
+      // Coze/Doubao API 测试
+      const response = await fetch(`${baseUrl}/v1/chat`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          bot_id: 'health-check',
+          user_id: 'health-check',
+          additional_messages: [
+            { role: 'user', content: 'ping', content_type: 'text' }
+          ]
+        })
+      });
+      
+      if (response.ok) {
+        return {
+          online: true,
+          message: 'API 连接正常'
+        };
+      } else {
+        const errorBody = await response.text();
+        let details = errorBody.substring(0, 200);
+        
+        if (response.status === 401) {
+          return {
+            online: false,
+            message: 'API Key 无效或已过期',
+            details: '请检查 API Key 是否正确'
+          };
+        } else if (response.status === 404) {
+          return {
+            online: false,
+            message: 'API 地址错误',
+            details: `请检查 base_url: ${baseUrl}`
+          };
+        } else if (response.status === 429) {
+          return {
+            online: false,
+            message: 'API 请求频率限制',
+            details: '请稍后重试'
+          };
+        }
+        
+        return {
+          online: false,
+          message: `HTTP ${response.status}: ${response.statusText}`,
+          details
+        };
+      }
     } else {
-      return {
-        online: false,
-        message: `HTTP ${response.status}: ${response.statusText}`
-      };
+      // 通用 OpenAI 兼容 API 测试
+      const response = await fetch(`${baseUrl}/v1/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        return {
+          online: true,
+          message: 'API 连接正常'
+        };
+      } else {
+        const errorBody = await response.text();
+        let details = errorBody.substring(0, 200);
+        
+        if (response.status === 401) {
+          return {
+            online: false,
+            message: 'API Key 无效或已过期',
+            details: '请检查 API Key 是否正确'
+          };
+        } else if (response.status === 404) {
+          return {
+            online: false,
+            message: 'API 地址错误',
+            details: `请检查 base_url: ${baseUrl}`
+          };
+        }
+        
+        return {
+          online: false,
+          message: `HTTP ${response.status}: ${response.statusText}`,
+          details
+        };
+      }
     }
   } catch (error: any) {
     console.error('LLM 健康检查失败:', error);
     
     // 解析错误信息
     let message = '连接失败';
+    let details = '';
+    
     if (error.message) {
       if (error.message.includes('ENOTFOUND')) {
         message = '无法解析 API 地址';
+        details = '请检查网络连接和 API 地址是否正确';
       } else if (error.message.includes('timeout')) {
         message = '连接超时';
+        details = 'API 服务响应时间过长，请检查网络或稍后重试';
+      } else if (error.message.includes('ECONNREFUSED')) {
+        message = '连接被拒绝';
+        details = 'API 服务可能未启动或端口被阻止';
+      } else if (error.message.includes('certificate')) {
+        message = 'SSL 证书错误';
+        details = '请检查 API 服务的 SSL 配置';
       } else {
-        message = error.message.substring(0, 100);
+        message = '连接失败';
+        details = error.message.substring(0, 200);
       }
     }
     
     return {
       online: false,
-      message
+      message,
+      details
     };
   }
 }

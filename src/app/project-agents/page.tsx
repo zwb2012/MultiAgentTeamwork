@@ -334,8 +334,22 @@ export default function ProjectAgentsPage() {
     }
   };
 
+  // 健康检查结果弹窗
+  const [healthCheckResult, setHealthCheckResult] = useState<{
+    agentName: string;
+    result: {
+      online: boolean;
+      message: string;
+      details?: string;
+      latency?: number;
+      checked_at?: string;
+    } | null;
+  } | null>(null);
+
   // 健康检查
   const handleHealthCheck = async (agentId: string) => {
+    const agent = agents.find(a => a.id === agentId);
+    
     try {
       const response = await fetch(`/api/agents/${agentId}/health-check`, {
         method: 'POST'
@@ -345,12 +359,30 @@ export default function ProjectAgentsPage() {
       
       if (result.success) {
         fetchAgents();
+        // 显示检查结果
+        setHealthCheckResult({
+          agentName: agent?.name || '智能体',
+          result: result.data
+        });
       } else {
-        alert('健康检查失败: ' + result.error);
+        setHealthCheckResult({
+          agentName: agent?.name || '智能体',
+          result: {
+            online: false,
+            message: result.error || '检查失败'
+          }
+        });
       }
     } catch (error) {
       console.error('健康检查失败:', error);
-      alert('健康检查失败');
+      setHealthCheckResult({
+        agentName: agent?.name || '智能体',
+        result: {
+          online: false,
+          message: '网络请求失败',
+          details: '请检查网络连接'
+        }
+      });
     }
   };
 
@@ -864,6 +896,68 @@ export default function ProjectAgentsPage() {
           ))}
         </div>
       )}
+      
+      {/* 健康检查结果弹窗 */}
+      <Dialog open={!!healthCheckResult} onOpenChange={() => setHealthCheckResult(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {healthCheckResult?.result?.online ? (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              ) : (
+                <AlertCircle className="h-5 w-5 text-red-500" />
+              )}
+              健康检查结果
+            </DialogTitle>
+            <DialogDescription>
+              {healthCheckResult?.agentName}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
+              <span className="text-sm font-medium">状态</span>
+              {healthCheckResult?.result?.online ? (
+                <Badge className="bg-green-500">在线</Badge>
+              ) : (
+                <Badge className="bg-red-500">离线</Badge>
+              )}
+            </div>
+            
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-muted-foreground">消息</div>
+              <p className="text-sm">{healthCheckResult?.result?.message}</p>
+            </div>
+            
+            {healthCheckResult?.result?.details && (
+              <div className="space-y-2">
+                <div className="text-sm font-medium text-muted-foreground">详情</div>
+                <p className="text-sm p-3 bg-muted rounded-lg">{healthCheckResult.result.details}</p>
+              </div>
+            )}
+            
+            {healthCheckResult?.result?.latency && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">延迟</span>
+                <span>{healthCheckResult.result.latency}ms</span>
+              </div>
+            )}
+            
+            {healthCheckResult?.result?.checked_at && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">检查时间</span>
+                <span>{new Date(healthCheckResult.result.checked_at).toLocaleString('zh-CN')}</span>
+              </div>
+            )}
+          </div>
+          
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setHealthCheckResult(null)}>
+              关闭
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
