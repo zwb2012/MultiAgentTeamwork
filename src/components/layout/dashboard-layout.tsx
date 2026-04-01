@@ -21,7 +21,8 @@ import {
   ChevronDown,
   ChevronRight,
   FolderCog,
-  FolderOpen
+  FolderOpen,
+  Server
 } from 'lucide-react';
 
 interface NavItem {
@@ -101,8 +102,15 @@ const navItems: NavItem[] = [
   },
   {
     title: '系统设置',
-    href: '/settings',
-    icon: <Settings className="h-5 w-5" />
+    href: '#',
+    icon: <Settings className="h-5 w-5" />,
+    children: [
+      {
+        title: '大模型配置',
+        href: '/model-configs',
+        icon: <Server className="h-4 w-4" />
+      }
+    ]
   }
 ];
 
@@ -113,7 +121,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '会话中心']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '会话中心', '系统设置']);
 
   const toggleExpand = (title: string) => {
     setExpandedItems(prev =>

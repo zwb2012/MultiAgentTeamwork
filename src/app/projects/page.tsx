@@ -14,12 +14,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -31,13 +25,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { 
   Plus, 
-  MoreHorizontal, 
   RefreshCw, 
   Trash2, 
   Edit,
   GitBranch,
   Clock,
-  ExternalLink
+  ExternalLink,
+  FolderOpen,
+  Play
 } from 'lucide-react';
 import type { Project, SyncStatus } from '@/types/project';
 import { SYNC_STATUS_CONFIG, SYNC_INTERVAL_OPTIONS } from '@/types/project';
@@ -243,37 +238,36 @@ export default function ProjectsPage() {
                       {formatDate(project.last_sync_at)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
+                      <div className="flex items-center justify-end gap-2">
+                        <Link href={`/projects/${project.id}`}>
+                          <Button variant="outline" size="sm">
+                            <Edit className="h-4 w-4 mr-1" />
+                            编辑
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem asChild>
-                            <Link href={`/projects/${project.id}`}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              编辑
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleSync(project.id)}
-                            disabled={syncingProjectId === project.id || project.sync_status === 'syncing'}
-                          >
-                            <RefreshCw className={`h-4 w-4 mr-2 ${
-                              syncingProjectId === project.id ? 'animate-spin' : ''
-                            }`} />
-                            {project.sync_status === 'syncing' ? '同步中...' : '立即同步'}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            className="text-red-600"
-                            onClick={() => setDeleteProjectId(project.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                        </Link>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleSync(project.id)}
+                          disabled={syncingProjectId === project.id || project.sync_status === 'syncing'}
+                        >
+                          {syncingProjectId === project.id ? (
+                            <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4 mr-1" />
+                          )}
+                          同步
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="text-red-600 hover:text-red-600"
+                          onClick={() => setDeleteProjectId(project.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          删除
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

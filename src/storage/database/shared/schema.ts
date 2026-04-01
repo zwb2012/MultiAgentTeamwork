@@ -1,6 +1,42 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, timestamp, boolean, integer, jsonb, index, serial } from "drizzle-orm/pg-core";
 
+// ==================== 大模型配置表 ====================
+export const model_configs = pgTable(
+  "model_configs",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 128 }).notNull(),
+    provider: varchar("provider", { length: 32 }).notNull(), // doubao, deepseek, kimi, zhipu, openai, anthropic, custom
+    
+    // 连接配置
+    api_key: text("api_key").notNull(),
+    base_url: varchar("base_url", { length: 512 }),
+    
+    // 默认模型和参数
+    default_model: varchar("default_model", { length: 64 }),
+    available_models: jsonb("available_models"), // string[]
+    
+    // 高级参数（默认值）
+    temperature: integer("temperature"),
+    max_tokens: integer("max_tokens"),
+    thinking: varchar("thinking", { length: 20 }), // enabled, disabled
+    caching: varchar("caching", { length: 20 }), // enabled, disabled
+    
+    // 状态
+    status: varchar("status", { length: 20 }).notNull().default("active"), // active, inactive, testing
+    last_tested_at: timestamp("last_tested_at", { withTimezone: true }),
+    test_result: jsonb("test_result"), // { success, message, latency, available_models }
+    
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("model_configs_provider_idx").on(table.provider),
+    index("model_configs_status_idx").on(table.status),
+  ]
+);
+
 // 智能体表
 export const agents = pgTable(
   "agents",
@@ -19,8 +55,9 @@ export const agents = pgTable(
     template_id: varchar("template_id", { length: 36 }), // 从哪个模板创建的
     
     // 大模型配置 (当 agent_type = llm 时使用)
-    model: varchar("model", { length: 64 }).default("doubao-seed-1-8-251228"),
-    model_config: jsonb("model_config"), // { api_key, base_url, temperature, thinking, caching, max_tokens }
+    model_config_id: varchar("model_config_id", { length: 36 }), // 关联模型配置（新方式）
+    model: varchar("model", { length: 64 }).default("doubao-seed-1-8-251228"), // 保留兼容
+    model_config: jsonb("model_config"), // { api_key, base_url, temperature, thinking, caching, max_tokens } (旧方式)
     
     // 进程配置 (当 agent_type = process 时使用)
     process_config: jsonb("process_config"), // { command, args, env, cwd, platform }
