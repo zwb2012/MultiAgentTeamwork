@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { 
   MessageSquare, 
   Plus, 
@@ -12,14 +13,15 @@ import {
   Search,
   MoreVertical,
   Trash2,
-  Circle,
-  Clock
+  Clock,
+  FolderOpen,
+  LayoutGrid,
+  FolderGit2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Dialog,
@@ -39,18 +41,25 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 import type { Conversation, ConversationType } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
 import type { Project } from '@/types/project';
 
+// 视图模式
+type ViewMode = 'all' | 'project';
+
 export default function ConversationsPage() {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [conversationParticipants, setConversationParticipants] = useState<Record<string, Agent[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<string>('all');
+  const [activeType, setActiveType] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   
   // 创建表单
@@ -64,6 +73,14 @@ export default function ConversationsPage() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (viewMode === 'project' && selectedProjectId) {
+      fetchConversations(selectedProjectId);
+    } else if (viewMode === 'all') {
+      fetchConversations();
+    }
+  }, [viewMode, selectedProjectId]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -85,25 +102,30 @@ export default function ConversationsPage() {
       
       if (result.success) {
         setProjects(result.data || []);
+        if (result.data?.length > 0 && !selectedProjectId) {
+          setSelectedProjectId(result.data[0].id);
+        }
       }
     } catch (error) {
       console.error('获取项目列表失败:', error);
     }
   };
 
-  const fetchConversations = async () => {
+  const fetchConversations = async (projectId?: string) => {
     try {
-      const response = await fetch('/api/conversations');
+      const url = projectId 
+        ? `/api/conversations?project_id=${projectId}`
+        : '/api/conversations';
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
-        setConversations(result.data);
+        setConversations(result.data || []);
         
-        // 从 conversation_participants 提取参与者信息
+        // 从会话数据中提取参与者信息
         const participantsMap: Record<string, Agent[]> = {};
         for (const conv of result.data || []) {
           if (conv.conversation_participants && conv.conversation_participants.length > 0) {
-            // conversation_participants 结构: [{ agent_id, agents: { id, name, ... } }]
             participantsMap[conv.id] = conv.conversation_participants
               .filter((p: any) => p.agents)
               .map((p: any) => ({
@@ -121,19 +143,30 @@ export default function ConversationsPage() {
     }
   };
 
-  const fetchAgents = async () => {
+  const fetchAgents = async (projectId?: string) => {
     try {
-      // 只获取非模板智能体（项目智能体）
-      const response = await fetch('/api/agents?is_template=false');
+      const url = projectId 
+        ? `/api/projects/${projectId}/agents`
+        : '/api/agents?is_template=false';
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
-        setAgents(result.data);
+        setAgents(result.data || []);
       }
     } catch (error) {
       console.error('获取智能体列表失败:', error);
     }
   };
+
+  // 切换视图模式时更新智能体列表
+  useEffect(() => {
+    if (viewMode === 'project' && selectedProjectId) {
+      fetchAgents(selectedProjectId);
+    } else if (viewMode === 'all') {
+      fetchAgents();
+    }
+  }, [viewMode, selectedProjectId]);
 
   const handleCreateConversation = async () => {
     if (!createForm.title) {
@@ -146,6 +179,9 @@ export default function ConversationsPage() {
       return;
     }
 
+    // 如果是项目会话模式，自动关联当前项目
+    const projectId = viewMode === 'project' ? selectedProjectId : createForm.project_id;
+
     try {
       const response = await fetch('/api/conversations', {
         method: 'POST',
@@ -153,7 +189,7 @@ export default function ConversationsPage() {
         body: JSON.stringify({
           title: createForm.title,
           type: createForm.type,
-          project_id: createForm.project_id || null,
+          project_id: projectId || null,
           agent_ids: createForm.selectedAgents
         })
       });
@@ -162,7 +198,7 @@ export default function ConversationsPage() {
       
       if (result.success) {
         setIsCreateDialogOpen(false);
-        fetchConversations();
+        fetchConversations(viewMode === 'project' ? selectedProjectId : undefined);
         setCreateForm({
           title: '',
           type: 'group',
@@ -186,7 +222,7 @@ export default function ConversationsPage() {
       });
       
       if (response.ok) {
-        fetchConversations();
+        fetchConversations(viewMode === 'project' ? selectedProjectId : undefined);
       }
     } catch (error) {
       console.error('删除会话失败:', error);
@@ -196,7 +232,7 @@ export default function ConversationsPage() {
   // 过滤会话
   const filteredConversations = conversations.filter(conv => {
     // 类型过滤
-    if (activeTab !== 'all' && conv.type !== activeTab) {
+    if (activeType !== 'all' && conv.type !== activeType) {
       return false;
     }
     
@@ -284,12 +320,21 @@ export default function ConversationsPage() {
     return date.toLocaleDateString('zh-CN');
   };
 
+  // 会话类型选项
+  const typeOptions = [
+    { value: 'all', label: '全部', icon: LayoutGrid },
+    { value: 'lobby', label: '大厅', icon: Globe },
+    { value: 'private', label: '私聊', icon: User },
+    { value: 'group', label: '群组', icon: Users },
+    { value: 'pipeline', label: '流水线', icon: Bot },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">会话管理</h1>
+          <h1 className="text-3xl font-bold">会话中心</h1>
           <p className="text-muted-foreground mt-1">
             管理多智能体对话会话，支持私聊、群组和流水线模式
           </p>
@@ -306,7 +351,10 @@ export default function ConversationsPage() {
             <DialogHeader>
               <DialogTitle>创建新会话</DialogTitle>
               <DialogDescription>
-                选择会话类型并配置参与者
+                {viewMode === 'project' 
+                  ? `为项目「${projects.find(p => p.id === selectedProjectId)?.name}」创建会话`
+                  : '选择会话类型并配置参与者'
+                }
               </DialogDescription>
             </DialogHeader>
             
@@ -350,24 +398,26 @@ export default function ConversationsPage() {
                 />
               </div>
 
-              {/* 项目选择 */}
-              <div className="space-y-2">
-                <Label>关联项目（可选）</Label>
-                <Select
-                  value={createForm.project_id || 'none'}
-                  onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v === 'none' ? null : v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="选择项目" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">不关联项目</SelectItem>
-                    {projects.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* 项目选择 - 仅在全部会话模式下显示 */}
+              {viewMode === 'all' && (
+                <div className="space-y-2">
+                  <Label>关联项目（可选）</Label>
+                  <Select
+                    value={createForm.project_id || 'none'}
+                    onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v === 'none' ? null : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择项目" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">不关联项目</SelectItem>
+                      {projects.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* 选择参与者 */}
               {createForm.type !== 'lobby' && (
@@ -376,42 +426,44 @@ export default function ConversationsPage() {
                   <ScrollArea className="h-48 border rounded-lg p-2">
                     {agents.length === 0 ? (
                       <div className="text-center text-muted-foreground py-4">
-                        暂无可用智能体
+                        {viewMode === 'project' ? '该项目暂无智能体' : '暂无可用智能体'}
                       </div>
                     ) : (
                       <div className="space-y-1">
                         {agents.map(agent => {
                           const isSelected = createForm.selectedAgents.includes(agent.id);
                           const isPrivate = createForm.type === 'private';
+                          const statusColor = agent.work_status === 'working'
+                            ? 'bg-blue-500 animate-pulse'
+                            : agent.online_status === 'online'
+                              ? 'bg-green-500'
+                              : agent.online_status === 'offline'
+                                ? 'bg-red-500'
+                                : 'bg-gray-400';
                           
                           return (
                             <div
                               key={agent.id}
-                              className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-colors ${
+                              className={cn(
+                                "flex items-center gap-2 p-2 rounded cursor-pointer transition-colors",
                                 isSelected ? 'bg-primary/10' : 'hover:bg-muted'
-                              }`}
+                              )}
                               onClick={() => {
                                 if (isPrivate) {
-                                  // 私聊模式：单选
                                   setCreateForm(prev => ({
                                     ...prev,
                                     selectedAgents: isSelected ? [] : [agent.id]
                                   }));
                                 } else {
-                                  // 群组模式：多选
-                                  setCreateForm(prev => ({
-                                    ...prev,
-                                    selectedAgents: isSelected
-                                      ? prev.selectedAgents.filter(id => id !== agent.id)
-                                      : [...prev.selectedAgents, agent.id]
-                                  }));
+                                  toggleAgentSelection(agent.id);
                                 }
                               }}
                             >
                               {isPrivate ? (
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                <div className={cn(
+                                  "w-4 h-4 rounded-full border-2 flex items-center justify-center",
                                   isSelected ? 'border-primary bg-primary' : 'border-muted-foreground'
-                                }`}>
+                                )}>
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
                               ) : (
@@ -428,7 +480,7 @@ export default function ConversationsPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium truncate">{agent.name}</div>
                               </div>
-                              <span className={`w-2 h-2 rounded-full ${getOnlineColor(agent.online_status)}`} />
+                              <span className={cn("w-2 h-2 rounded-full", statusColor)} />
                             </div>
                           );
                         })}
@@ -460,9 +512,52 @@ export default function ConversationsPage() {
         </Dialog>
       </div>
 
-      {/* 搜索栏 */}
+      {/* 视图切换和项目选择 */}
       <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
+        {/* 分段控制器 - 视图切换 */}
+        <div className="inline-flex h-10 items-center rounded-lg bg-muted p-1">
+          <button
+            onClick={() => setViewMode('all')}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all",
+              viewMode === 'all' 
+                ? "bg-background text-foreground shadow-sm" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            全部会话
+          </button>
+          <button
+            onClick={() => setViewMode('project')}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all",
+              viewMode === 'project' 
+                ? "bg-background text-foreground shadow-sm" 
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FolderGit2 className="h-4 w-4" />
+            项目会话
+          </button>
+        </div>
+
+        {/* 项目选择器 - 仅在项目会话模式下显示 */}
+        {viewMode === 'project' && (
+          <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="选择项目" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects.map(p => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* 搜索框 */}
+        <div className="relative flex-1 max-w-md ml-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="搜索会话..."
@@ -471,216 +566,225 @@ export default function ConversationsPage() {
             className="pl-10"
           />
         </div>
-        <Badge variant="outline">{filteredConversations.length} 个会话</Badge>
       </div>
 
-      {/* 类型标签页 */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList>
-          <TabsTrigger value="all">全部</TabsTrigger>
-          <TabsTrigger value="lobby">
-            <Globe className="h-4 w-4 mr-1" />
-            大厅
-          </TabsTrigger>
-          <TabsTrigger value="private">
-            <User className="h-4 w-4 mr-1" />
-            私聊
-          </TabsTrigger>
-          <TabsTrigger value="group">
-            <Users className="h-4 w-4 mr-1" />
-            群组
-          </TabsTrigger>
-          <TabsTrigger value="pipeline">
-            <Bot className="h-4 w-4 mr-1" />
-            流水线
-          </TabsTrigger>
-        </TabsList>
+      {/* 类型过滤 - 美观的按钮组 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {typeOptions.map((option) => {
+          const Icon = option.icon;
+          return (
+            <button
+              key={option.value}
+              onClick={() => setActiveType(option.value)}
+              className={cn(
+                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all",
+                activeType === option.value
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {option.label}
+            </button>
+          );
+        })}
+        <div className="ml-auto">
+          <Badge variant="outline">{filteredConversations.length} 个会话</Badge>
+        </div>
+      </div>
 
-        <TabsContent value={activeTab} className="mt-4">
-          {isLoading ? (
-            <div className="text-center py-12">
-              <div className="text-muted-foreground">加载中...</div>
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">暂无会话</p>
-                <Button
-                  variant="link"
-                  className="mt-2"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                >
-                  创建第一个会话
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredConversations.map(conv => {
-                const participants = conversationParticipants[conv.id] || [];
-                const onlineCount = participants.filter(a => a.online_status === 'online').length;
-                const projectName = getProjectName(conv.project_id);
-                
-                return (
-                  <Card key={conv.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                    <Link href={`/conversations/${conv.id}`}>
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            {getTypeIcon(conv.type)}
-                            <CardTitle className="text-lg hover:text-primary transition-colors">{conv.title}</CardTitle>
-                          </div>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link href={`/conversations/${conv.id}`}>
-                                  进入会话
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                className="text-destructive"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  handleDeleteConversation(conv.id);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                删除
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap mt-2">
-                          <Badge variant="outline" className="text-xs">
-                            {getTypeLabel(conv.type)}
-                          </Badge>
-                          {projectName && (
-                            <Badge variant="secondary" className="text-xs">
-                              {projectName}
-                            </Badge>
-                          )}
-                          <Badge 
-                            variant="outline" 
-                            className={`text-xs ${onlineCount > 0 ? 'text-green-600 border-green-300' : 'text-muted-foreground'}`}
+      {/* 会话列表 */}
+      {isLoading ? (
+        <div className="text-center py-12">
+          <div className="text-muted-foreground">加载中...</div>
+        </div>
+      ) : viewMode === 'project' && !selectedProjectId ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">请选择一个项目</p>
+          </CardContent>
+        </Card>
+      ) : filteredConversations.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">
+              {viewMode === 'project' ? '该项目暂无会话' : '暂无会话'}
+            </p>
+            <Button
+              variant="link"
+              className="mt-2"
+              onClick={() => setIsCreateDialogOpen(true)}
+            >
+              创建第一个会话
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredConversations.map(conv => {
+            const participants = conversationParticipants[conv.id] || [];
+            const onlineCount = participants.filter(a => a.online_status === 'online').length;
+            const projectName = getProjectName(conv.project_id);
+            
+            return (
+              <Card key={conv.id} className="hover:shadow-md transition-shadow cursor-pointer">
+                <Link href={`/conversations/${conv.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        {getTypeIcon(conv.type as ConversationType)}
+                        <CardTitle className="text-lg hover:text-primary transition-colors">{conv.title}</CardTitle>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+                          <Button variant="ghost" size="sm">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/conversations/${conv.id}`}>
+                              进入会话
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDeleteConversation(conv.id);
+                            }}
                           >
-                            {onlineCount}/{participants.length} 在线
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {/* 参与者头像和状态 */}
-                        <div className="flex items-center gap-1 mb-3">
-                          {participants.slice(0, 5).map((agent, idx) => {
-                            // 工作状态优先于在线状态显示
-                            const statusColor = agent.work_status === 'working' 
-                              ? 'bg-blue-500 animate-pulse' 
-                              : agent.online_status === 'online' 
-                                ? 'bg-green-500' 
-                                : agent.online_status === 'offline' 
-                                  ? 'bg-red-500' 
-                                  : 'bg-gray-400';
-                            const statusText = agent.work_status === 'working'
-                              ? '工作中'
-                              : agent.online_status === 'online'
-                                ? '在线'
-                                : agent.online_status === 'offline'
-                                  ? '离线'
-                                  : '未知';
-                            
-                            return (
-                              <div key={agent.id} className="relative -ml-2 first:ml-0 group">
-                                <Avatar className="h-7 w-7 border-2 border-background">
-                                  <AvatarFallback className="text-xs bg-primary/10">
-                                    <Bot className="h-3 w-3" />
-                                  </AvatarFallback>
-                                </Avatar>
-                                <span 
-                                  className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background ${statusColor}`} 
-                                  title={statusText}
-                                />
-                                {/* 悬浮显示状态和模型 */}
-                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1.5 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-max">
-                                  <div className="font-medium">{agent.name}</div>
-                                  <div className="text-muted-foreground">{statusText}</div>
-                                  {agent.model && (
-                                    <div className="text-muted-foreground text-[10px] mt-0.5">
-                                      模型: {agent.model}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {participants.length > 5 && (
-                            <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium -ml-2 border-2 border-background">
-                              +{participants.length - 5}
-                            </div>
-                          )}
-                          {participants.length === 0 && (
-                            <span className="text-xs text-muted-foreground">暂无参与者</span>
-                          )}
-                        </div>
-                        
-                        {/* 在线/工作中统计 */}
-                        <div className="flex items-center gap-2 mb-2">
-                          {(() => {
-                            const workingCount = participants.filter(a => a.work_status === 'working').length;
-                            const onlineCount = participants.filter(a => a.work_status !== 'working' && a.online_status === 'online').length;
-                            
-                            return (
-                              <>
-                                {workingCount > 0 && (
-                                  <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
-                                    {workingCount} 工作中
-                                  </Badge>
-                                )}
-                                {onlineCount > 0 && (
-                                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
-                                    {onlineCount} 在线
-                                  </Badge>
-                                )}
-                                {workingCount === 0 && onlineCount === 0 && participants.length > 0 && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {participants.length} 离线
-                                  </Badge>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        
-                        {/* 最后消息 */}
-                        {conv.last_message ? (
-                          <div className="text-sm text-muted-foreground line-clamp-2">
-                            <span className="font-medium">{conv.last_message.agent_name}:</span>{' '}
-                            {conv.last_message.content}
-                          </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            暂无消息
-                          </div>
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap mt-2">
+                      <Badge variant="outline" className="text-xs">
+                        {getTypeLabel(conv.type as ConversationType)}
+                      </Badge>
+                      {projectName && (
+                        <Badge variant="secondary" className="text-xs">
+                          {projectName}
+                        </Badge>
+                      )}
+                      <Badge 
+                        variant="outline" 
+                        className={cn(
+                          "text-xs",
+                          onlineCount > 0 ? "text-green-600 border-green-300" : "text-muted-foreground"
                         )}
-                        
-                        {/* 时间 */}
-                        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {formatTime(conv.updated_at || conv.created_at)}
+                      >
+                        {onlineCount}/{participants.length} 在线
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* 参与者头像和状态 */}
+                    <div className="flex items-center gap-1 mb-3">
+                      {participants.slice(0, 5).map((agent) => {
+                        const statusColor = agent.work_status === 'working' 
+                          ? 'bg-blue-500 animate-pulse' 
+                          : agent.online_status === 'online' 
+                            ? 'bg-green-500' 
+                            : agent.online_status === 'offline' 
+                              ? 'bg-red-500' 
+                              : 'bg-gray-400';
+                        const statusText = agent.work_status === 'working'
+                          ? '工作中'
+                          : agent.online_status === 'online'
+                            ? '在线'
+                            : agent.online_status === 'offline'
+                              ? '离线'
+                              : '未知';
+                      
+                        return (
+                          <div key={agent.id} className="relative -ml-2 first:ml-0 group">
+                            <Avatar className="h-7 w-7 border-2 border-background">
+                              <AvatarFallback className="text-xs bg-primary/10">
+                                <Bot className="h-3 w-3" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <span 
+                              className={cn("absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background", statusColor)} 
+                              title={statusText}
+                            />
+                            {/* 悬浮显示状态和模型 */}
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1.5 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity z-10 min-w-max">
+                              <div className="font-medium">{agent.name}</div>
+                              <div className="text-muted-foreground">{statusText}</div>
+                              {agent.model && (
+                                <div className="text-muted-foreground text-[10px] mt-0.5">
+                                  模型: {agent.model}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {participants.length > 5 && (
+                        <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium -ml-2 border-2 border-background">
+                          +{participants.length - 5}
                         </div>
-                      </CardContent>
-                    </Link>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                      )}
+                      {participants.length === 0 && (
+                        <span className="text-xs text-muted-foreground">暂无参与者</span>
+                      )}
+                    </div>
+                    
+                    {/* 在线/工作中统计 */}
+                    <div className="flex items-center gap-2 mb-2">
+                      {(() => {
+                        const workingCount = participants.filter(a => a.work_status === 'working').length;
+                        const onlineOnlyCount = participants.filter(a => a.work_status !== 'working' && a.online_status === 'online').length;
+                        
+                        return (
+                          <>
+                            {workingCount > 0 && (
+                              <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                                {workingCount} 工作中
+                              </Badge>
+                            )}
+                            {onlineOnlyCount > 0 && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                                {onlineOnlyCount} 在线
+                              </Badge>
+                            )}
+                            {workingCount === 0 && onlineOnlyCount === 0 && participants.length > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                {participants.length} 离线
+                              </Badge>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    
+                    {/* 最后消息 */}
+                    {conv.last_message ? (
+                      <div className="text-sm text-muted-foreground line-clamp-2">
+                        <span className="font-medium">{conv.last_message.agent_name}:</span>{' '}
+                        {conv.last_message.content}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">暂无消息</div>
+                    )}
+                    
+                    {/* 时间 */}
+                    <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {formatTime(conv.updated_at || conv.created_at)}
+                    </div>
+                  </CardContent>
+                </Link>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
