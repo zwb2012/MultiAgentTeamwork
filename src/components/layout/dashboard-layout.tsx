@@ -22,7 +22,8 @@ import {
   ChevronRight,
   FolderCog,
   FolderOpen,
-  Server
+  Server,
+  FileText
 } from 'lucide-react';
 
 interface NavItem {
@@ -114,6 +115,11 @@ const navItems: NavItem[] = [
         title: '大模型配置',
         href: '/model-configs',
         icon: <Server className="h-4 w-4" />
+      },
+      {
+        title: '健康日志',
+        href: '/health-logs',
+        icon: <FileText className="h-4 w-4" />
       }
     ]
   }

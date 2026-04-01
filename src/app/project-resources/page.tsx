@@ -848,21 +848,43 @@ export default function ProjectResourcesPage() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {/* 参与者头像 */}
+                      {/* 参与者头像和状态 */}
                       <div className="flex items-center gap-1 mb-3">
-                        {participants.slice(0, 5).map((agent: Agent, idx: number) => (
-                          <div key={agent.id} className="relative -ml-2 first:ml-0">
-                            <Avatar className="h-7 w-7 border-2 border-background">
-                              <AvatarFallback className="text-xs bg-primary/10">
-                                <Bot className="h-3 w-3" />
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background ${
-                              agent.online_status === 'online' ? 'bg-green-500' : 
-                              agent.online_status === 'offline' ? 'bg-red-500' : 'bg-gray-400'
-                            }`} />
-                          </div>
-                        ))}
+                        {participants.slice(0, 5).map((agent: Agent, idx: number) => {
+                          // 工作状态优先于在线状态显示
+                          const statusColor = agent.work_status === 'working' 
+                            ? 'bg-blue-500 animate-pulse' 
+                            : agent.online_status === 'online' 
+                              ? 'bg-green-500' 
+                              : agent.online_status === 'offline' 
+                                ? 'bg-red-500' 
+                                : 'bg-gray-400';
+                          const statusText = agent.work_status === 'working'
+                            ? '工作中'
+                            : agent.online_status === 'online'
+                              ? '在线'
+                              : agent.online_status === 'offline'
+                                ? '离线'
+                                : '未知';
+                          
+                          return (
+                            <div key={agent.id} className="relative -ml-2 first:ml-0 group">
+                              <Avatar className="h-7 w-7 border-2 border-background">
+                                <AvatarFallback className="text-xs bg-primary/10">
+                                  <Bot className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <span 
+                                className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-background ${statusColor}`} 
+                                title={statusText}
+                              />
+                              {/* 悬浮显示状态 */}
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-popover text-popover-foreground text-xs rounded shadow-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                {agent.name} - {statusText}
+                              </div>
+                            </div>
+                          );
+                        })}
                         {participants.length > 5 && (
                           <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center text-xs font-medium -ml-2 border-2 border-background">
                             +{participants.length - 5}
@@ -871,6 +893,34 @@ export default function ProjectResourcesPage() {
                         {participants.length === 0 && (
                           <span className="text-xs text-muted-foreground">暂无参与者</span>
                         )}
+                      </div>
+                      
+                      {/* 在线/工作中统计 */}
+                      <div className="flex items-center gap-2 mb-2">
+                        {(() => {
+                          const workingCount = participants.filter((a: Agent) => a.work_status === 'working').length;
+                          const onlineCount = participants.filter((a: Agent) => a.work_status !== 'working' && a.online_status === 'online').length;
+                          
+                          return (
+                            <>
+                              {workingCount > 0 && (
+                                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                                  {workingCount} 工作中
+                                </Badge>
+                              )}
+                              {onlineCount > 0 && (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                                  {onlineCount} 在线
+                                </Badge>
+                              )}
+                              {workingCount === 0 && onlineCount === 0 && participants.length > 0 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  {participants.length} 离线
+                                </Badge>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                       
                       {/* 最后消息或时间 */}

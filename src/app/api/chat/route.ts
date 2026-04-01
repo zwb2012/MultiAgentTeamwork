@@ -5,6 +5,30 @@ import type { Agent, Message, ModelConfig } from '@/types/agent';
 import { injectProjectContext, buildProjectContextFromProject } from '@/lib/project-context';
 import { getAgentTasks, injectTaskContext } from '@/lib/agent-tasks';
 
+// SDK 支持的模型列表
+const SUPPORTED_MODELS = [
+  'doubao-seed-2-0-pro-260215',
+  'doubao-seed-2-0-lite-260215',
+  'doubao-seed-2-0-mini-260215',
+  'doubao-seed-1-8-251228',
+  'doubao-seed-1-6-251015',
+  'doubao-seed-1-6-vision-250815',
+  'doubao-seed-1-6-lite-251015',
+  'deepseek-v3-2-251201',
+  'glm-4-7-251222',
+  'deepseek-r1-250528',
+  'kimi-k2-5-260127'
+];
+
+// 模型名称映射（将常见模型名映射到SDK支持的名称）
+const MODEL_MAPPING: Record<string, string> = {
+  'deepseek-chat': 'deepseek-v3-2-251201',
+  'deepseek': 'deepseek-v3-2-251201',
+  'doubao': 'doubao-seed-1-8-251228',
+  'kimi': 'kimi-k2-5-260127',
+  'glm': 'glm-4-7-251222'
+};
+
 // POST /api/chat - AI对话(流式输出)
 export async function POST(request: NextRequest) {
   try {
@@ -33,7 +57,9 @@ export async function POST(request: NextRequest) {
           model,
           model_config,
           agent_type,
-          status
+          status,
+          work_status,
+          online_status
         )
       `)
       .eq('conversation_id', conversation_id);
@@ -122,7 +148,10 @@ export async function POST(request: NextRequest) {
     // 更新智能体状态为工作中
     await client
       .from('agents')
-      .update({ status: 'working', updated_at: new Date().toISOString() })
+      .update({ 
+        work_status: 'working', 
+        updated_at: new Date().toISOString() 
+      })
       .eq('id', targetAgent.id);
     
     // 获取历史消息
@@ -171,7 +200,8 @@ export async function POST(request: NextRequest) {
         conversation_id,
         agent_id: targetAgent.id,
         role: 'user',
-        content: user_message
+        content: user_message,
+        message_type: 'text'
       });
     
     // 初始化LLM客户端
@@ -182,16 +212,26 @@ export async function POST(request: NextRequest) {
     // 获取模型配置
     const agentModelConfig = (targetAgent.model_config as ModelConfig) || {};
     
-    // 如果有自定义API配置
-    if (agentModelConfig.api_key || agentModelConfig.base_url) {
-      // 注意：coze-coding-dev-sdk 暂不支持自定义base_url
-      // 这里使用默认配置，实际使用时需要根据SDK支持情况调整
-      console.log('使用自定义模型配置');
+    // 确定使用的模型
+    let modelName = targetAgent.model || 'doubao-seed-1-8-251228';
+    
+    // 如果模型不在支持列表中，尝试映射
+    if (!SUPPORTED_MODELS.includes(modelName)) {
+      // 尝试通过映射找到支持的模型
+      const mappedModel = MODEL_MAPPING[modelName];
+      if (mappedModel) {
+        console.log(`模型 ${modelName} 映射到 ${mappedModel}`);
+        modelName = mappedModel;
+      } else {
+        // 使用默认模型
+        console.log(`模型 ${modelName} 不支持，使用默认模型 doubao-seed-1-8-251228`);
+        modelName = 'doubao-seed-1-8-251228';
+      }
     }
     
     // 构建LLM配置
     const llmConfig = {
-      model: targetAgent.model || 'doubao-seed-1-8-251228',
+      model: modelName,
       temperature: agentModelConfig.temperature || 0.7,
       thinking: agentModelConfig.thinking || 'disabled',
       caching: agentModelConfig.caching || 'disabled'
@@ -229,6 +269,7 @@ export async function POST(request: NextRequest) {
               agent_id: targetAgent.id,
               role: 'assistant',
               content: fullResponse,
+              message_type: 'text',
               metadata: {
                 model: llmConfig.model,
                 agent_name: targetAgent.name
@@ -238,7 +279,7 @@ export async function POST(request: NextRequest) {
           // 更新智能体状态为空闲
           await client
             .from('agents')
-            .update({ status: 'idle', updated_at: new Date().toISOString() })
+            .update({ work_status: 'idle', updated_at: new Date().toISOString() })
             .eq('id', targetAgent.id);
           
           // 发送完成信号
@@ -250,7 +291,7 @@ export async function POST(request: NextRequest) {
           // 更新智能体状态为空闲
           await client
             .from('agents')
-            .update({ status: 'idle', updated_at: new Date().toISOString() })
+            .update({ work_status: 'idle', updated_at: new Date().toISOString() })
             .eq('id', targetAgent.id);
           
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '生成回复失败' })}\n\n`));
