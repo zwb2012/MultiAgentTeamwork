@@ -39,10 +39,7 @@ export async function getAllTickets(projectId?: string): Promise<Ticket[]> {
   
   let query = client
     .from('tickets')
-    .select(`
-      *,
-      agents:tickets_assignee_id_fkey (id, name)
-    `)
+    .select('*')
     .order('created_at', { ascending: false });
   
   if (projectId) {
@@ -66,7 +63,7 @@ export async function getAllTickets(projectId?: string): Promise<Ticket[]> {
     priority: t.priority,
     status: t.status,
     assignee_id: t.assignee_id,
-    assignee: t.agents ? { id: t.agents.id, name: t.agents.name } : null,
+    assignee: null,
     reporter_id: t.reporter_id,
     created_at: t.created_at,
     updated_at: t.updated_at,
@@ -82,10 +79,7 @@ export async function getTicket(id: string): Promise<Ticket | null> {
   
   const { data, error } = await client
     .from('tickets')
-    .select(`
-      *,
-      agents:tickets_assignee_id_fkey (id, name)
-    `)
+    .select('*')
     .eq('id', id)
     .single();
   
@@ -103,7 +97,7 @@ export async function getTicket(id: string): Promise<Ticket | null> {
     priority: data.priority,
     status: data.status,
     assignee_id: data.assignee_id,
-    assignee: data.agents ? { id: data.agents.id, name: data.agents.name } : null,
+    assignee: null,
     reporter_id: data.reporter_id,
     created_at: data.created_at,
     updated_at: data.updated_at,
