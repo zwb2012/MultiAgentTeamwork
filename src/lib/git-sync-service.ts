@@ -128,21 +128,34 @@ export class GitSyncService {
     // 确保目录存在
     await fs.mkdir(this.baseDir, { recursive: true });
     
-    // 检查项目是否已克隆
+    // 先检查远程仓库状态
+    const remoteStatus = await this.checkRemoteStatus(project.git_url, project.git_token);
+    
+    // 检查项目是否已克隆（本地有.git目录）
     const isCloned = await this.isProjectCloned(projectDir);
     
-    if (isCloned) {
-      // 拉取最新代码
-      return await this.pullProject(project, projectDir);
-    } else {
-      // 检查远程仓库状态
-      const remoteStatus = await this.checkRemoteStatus(project.git_url, project.git_token);
-      
-      if (!remoteStatus.exists || !remoteStatus.initialized) {
-        // 远程仓库不存在或未初始化，本地创建并初始化
-        return await this.initLocalProject(project, projectDir, remoteStatus);
+    if (!remoteStatus.exists || !remoteStatus.initialized) {
+      // 远程仓库不存在或未初始化
+      if (isCloned) {
+        // 本地已初始化，无需操作
+        console.log(`本地已初始化，远程仓库为空，跳过同步: ${project.name}`);
+        const { stdout: commitSha } = await execAsync('git rev-parse HEAD', { cwd: projectDir });
+        return {
+          commitSha: commitSha.trim(),
+          commitsCount: 0,
+          changes: { added: [], modified: [], deleted: [] }
+        };
       } else {
-        // 远程仓库已存在，正常克隆
+        // 本地也未初始化，执行本地初始化
+        return await this.initLocalProject(project, projectDir, remoteStatus);
+      }
+    } else {
+      // 远程仓库已初始化
+      if (isCloned) {
+        // 本地已克隆，拉取最新代码
+        return await this.pullProject(project, projectDir);
+      } else {
+        // 本地未克隆，克隆项目
         return await this.cloneProject(project, projectDir);
       }
     }
