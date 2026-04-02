@@ -61,6 +61,7 @@ import {
   Activity,
   Users,
   User,
+  UserPlus,
   Globe,
   Clock
 } from 'lucide-react';
@@ -94,6 +95,14 @@ export default function ProjectResourcesPage() {
     unhealthy: number;
   } | null>(null);
   const [checkingAgents, setCheckingAgents] = useState<Set<string>>(new Set());
+  
+  // 管理参与者状态
+  const [showManageParticipants, setShowManageParticipants] = useState(false);
+  const [managingConversation, setManagingConversation] = useState<any>(null);
+  const [managingParticipants, setManagingParticipants] = useState<Agent[]>([]);
+  const [selectedNewAgentIds, setSelectedNewAgentIds] = useState<string[]>([]);
+  const [managingLoading, setManagingLoading] = useState(false);
+  const [managingSubmitting, setManagingSubmitting] = useState(false);
   
   // 创建表单
   const [newAgent, setNewAgent] = useState({ name: '', role: 'developer', system_prompt: '' });
@@ -477,6 +486,85 @@ export default function ProjectResourcesPage() {
       alert('删除失败');
     } finally {
       setDeleteTarget(null);
+    }
+  };
+
+  // 打开管理参与者弹窗
+  const handleOpenManageParticipants = async (conversation: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setManagingConversation(conversation);
+    setManagingLoading(true);
+    setShowManageParticipants(true);
+    
+    try {
+      const response = await fetch(`/api/conversations/${conversation.id}/participants`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setManagingParticipants(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取参与者失败:', error);
+    } finally {
+      setManagingLoading(false);
+    }
+    
+    setSelectedNewAgentIds([]);
+  };
+
+  // 添加参与者
+  const handleAddParticipants = async () => {
+    if (!managingConversation || selectedNewAgentIds.length === 0) return;
+    
+    setManagingSubmitting(true);
+    try {
+      const response = await fetch(`/api/conversations/${managingConversation.id}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_ids: selectedNewAgentIds })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        const participantsRes = await fetch(`/api/conversations/${managingConversation.id}/participants`);
+        const participantsResult = await participantsRes.json();
+        if (participantsResult.success) {
+          setManagingParticipants(participantsResult.data || []);
+        }
+        setSelectedNewAgentIds([]);
+        fetchResources();
+      } else {
+        alert(result.error || '添加失败');
+      }
+    } catch (error) {
+      console.error('添加参与者失败:', error);
+      alert('添加失败');
+    } finally {
+      setManagingSubmitting(false);
+    }
+  };
+
+  // 移除参与者
+  const handleRemoveParticipant = async (agentId: string) => {
+    if (!managingConversation) return;
+    
+    try {
+      const response = await fetch(`/api/conversations/${managingConversation.id}/participants`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setManagingParticipants(prev => prev.filter(p => p.id !== agentId));
+        fetchResources();
+      } else {
+        alert(result.error || '移除失败');
+      }
+    } catch (error) {
+      console.error('移除参与者失败:', error);
+      alert('移除失败');
     }
   };
 
@@ -967,6 +1055,10 @@ export default function ProjectResourcesPage() {
                                 进入会话
                               </Link>
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={(e) => handleOpenManageParticipants(conv, e)}>
+                              <UserPlus className="h-4 w-4 mr-2" />
+                              管理参与者
+                            </DropdownMenuItem>
                             <DropdownMenuItem 
                               className="text-red-600"
                               onClick={(e) => {
@@ -1413,6 +1505,128 @@ export default function ProjectResourcesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* 管理参与者弹窗 */}
+      <Dialog open={showManageParticipants} onOpenChange={setShowManageParticipants}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>管理参与者 - {managingConversation?.title}</DialogTitle>
+            <DialogDescription>
+              添加或移除会话中的智能体
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {managingLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <>
+                {/* 当前参与者列表 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">当前参与者</Label>
+                  <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+                    {managingParticipants.length === 0 ? (
+                      <div className="p-4 text-center text-muted-foreground text-sm">
+                        暂无参与者
+                      </div>
+                    ) : (
+                      managingParticipants.map(agent => (
+                        <div key={agent.id} className="flex items-center justify-between p-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="bg-primary/10">
+                                <Bot className="h-4 w-4" />
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <div className="text-sm font-medium">{agent.name}</div>
+                              <div className="text-xs text-muted-foreground">{agent.role}</div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleRemoveParticipant(agent.id)}
+                            disabled={managingParticipants.length <= 1}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                
+                {/* 添加新参与者 */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">添加参与者</Label>
+                  <ScrollArea className="h-40 border rounded-lg p-2">
+                    {agents.filter(a => !managingParticipants.some(p => p.id === a.id)).length === 0 ? (
+                      <div className="p-4 text-center text-muted-foreground text-sm">
+                        暂无可添加的智能体
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {agents
+                          .filter(a => !managingParticipants.some(p => p.id === a.id))
+                          .map(agent => (
+                            <div
+                              key={agent.id}
+                              className="flex items-center gap-3 p-2 rounded hover:bg-muted cursor-pointer"
+                              onClick={() => {
+                                setSelectedNewAgentIds(prev =>
+                                  prev.includes(agent.id)
+                                    ? prev.filter(id => id !== agent.id)
+                                    : [...prev, agent.id]
+                                );
+                              }}
+                            >
+                              <Checkbox
+                                checked={selectedNewAgentIds.includes(agent.id)}
+                                onCheckedChange={() => {}}
+                              />
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="bg-primary/10">
+                                  <Bot className="h-3 w-3" />
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm truncate">{agent.name}</div>
+                              </div>
+                              <Badge variant="outline" className="text-xs">{agent.role}</Badge>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </ScrollArea>
+                </div>
+              </>
+            )}
+          </div>
+          
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowManageParticipants(false)}>
+              关闭
+            </Button>
+            <Button 
+              onClick={handleAddParticipants}
+              disabled={managingSubmitting || selectedNewAgentIds.length === 0}
+            >
+              {managingSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  添加中...
+                </>
+              ) : (
+                `添加选中 (${selectedNewAgentIds.length})`
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
