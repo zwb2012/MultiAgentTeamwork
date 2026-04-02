@@ -649,3 +649,45 @@ export function getPipelineRuns(pipelineId: string): PipelineRun[] {
     return [];
   }
 }
+
+/**
+ * 获取单个运行记录
+ */
+export function getPipelineRun(runId: string): PipelineRun | null {
+  try {
+    const fs = require('fs');
+    
+    // 遍历所有流水线目录查找运行记录
+    const pipelineDirs = listDirs(PIPELINES_DIR);
+    
+    for (const pipelineId of pipelineDirs) {
+      const runPath = path.join(PIPELINES_DIR, pipelineId, 'runs', `${runId}.md`);
+      if (fs.existsSync(runPath)) {
+        const content = readFile(runPath);
+        if (content) {
+          const { data } = parseFrontmatter(content);
+          return {
+            id: runId,
+            pipeline_id: pipelineId,
+            status: data.status || 'running',
+            trigger_by: data.trigger_by || 'manual',
+            ticket_id: data.ticket_id,
+            ticket_type: data.ticket_type,
+            total_nodes: data.total_nodes || 0,
+            completed_nodes: data.completed_nodes || 0,
+            failed_nodes: data.failed_nodes || 0,
+            started_at: data.started_at,
+            completed_at: data.completed_at,
+            created_at: data.started_at || new Date().toISOString(),
+            input_data: data.input_data
+          };
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('获取运行记录失败:', error);
+    return null;
+  }
+}

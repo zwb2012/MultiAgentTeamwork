@@ -298,8 +298,8 @@ export default function ProjectTicketsPage() {
         setExecuteDialogOpen(false);
         fetchData();
         // 跳转到执行详情页
-        if (result.data?.run_id) {
-          router.push(`/pipelines/run/${result.data.run_id}`);
+        if (result.data?.id) {
+          router.push(`/pipelines/run/${result.data.id}`);
         } else {
           alert('流水线已开始执行');
         }
@@ -342,8 +342,8 @@ export default function ProjectTicketsPage() {
         if (result.success) {
           setFlowDialogOpen(false);
           fetchData();
-          if (result.data?.run_id) {
-            router.push(`/pipelines/run/${result.data.run_id}`);
+          if (result.data?.id) {
+            router.push(`/pipelines/run/${result.data.id}`);
           } else {
             alert('流水线已开始执行');
           }
