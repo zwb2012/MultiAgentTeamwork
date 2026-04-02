@@ -272,42 +272,67 @@ temp/
       project.git_token
     );
     
-    // 克隆命令
-    const cloneCommand = `git clone --branch ${project.git_branch} --single-branch ${authenticatedUrl} ${projectDir}`;
-    
     console.log(`克隆项目: ${project.git_url} -> ${projectDir}`);
     
     try {
-      await execAsync(cloneCommand, {
+      // 先尝试克隆（不带分支参数，更兼容空仓库）
+      await execAsync(`git clone ${authenticatedUrl} ${projectDir}`, {
         timeout: 300000, // 5分钟超时
         maxBuffer: 50 * 1024 * 1024 // 50MB buffer
       });
       
-      // 获取最新 commit
-      const { stdout: commitSha } = await execAsync(
-        'git rev-parse HEAD',
-        { cwd: projectDir }
-      );
-      
-      // 获取所有文件列表
-      const { stdout: files } = await execAsync(
-        'git ls-tree --name-only -r HEAD',
-        { cwd: projectDir }
-      );
-      
-      const allFiles = files.trim().split('\n').filter(Boolean);
-      
-      return {
-        commitSha: commitSha.trim(),
-        commitsCount: 1, // 首次克隆算1个提交
-        changes: {
-          added: allFiles,
-          modified: [],
-          deleted: []
+      // 检查仓库是否有 commit
+      try {
+        const { stdout: commitSha } = await execAsync(
+          'git rev-parse HEAD',
+          { cwd: projectDir }
+        );
+        
+        // 检查并切换到目标分支
+        try {
+          await execAsync(`git checkout ${project.git_branch}`, { cwd: projectDir });
+        } catch {
+          // 分支不存在，可能需要创建
+          console.log(`分支 ${project.git_branch} 不存在，尝试创建`);
+          try {
+            await execAsync(`git checkout -b ${project.git_branch}`, { cwd: projectDir });
+          } catch {
+            // 空仓库可能无法创建分支
+          }
         }
-      };
+        
+        // 获取所有文件列表
+        const { stdout: files } = await execAsync(
+          'git ls-tree --name-only -r HEAD',
+          { cwd: projectDir }
+        );
+        
+        const allFiles = files.trim().split('\n').filter(Boolean);
+        
+        return {
+          commitSha: commitSha.trim(),
+          commitsCount: 1,
+          changes: {
+            added: allFiles,
+            modified: [],
+            deleted: []
+          }
+        };
+      } catch {
+        // 仓库是空的，没有 commit
+        console.log(`克隆的仓库为空: ${project.git_url}`);
+        return {
+          commitSha: '',
+          commitsCount: 0,
+          changes: {
+            added: [],
+            modified: [],
+            deleted: []
+          }
+        };
+      }
     } catch (error) {
-      // 清理失败的克隆目录
+      // 克隆失败，清理目录
       try {
         await fs.rm(projectDir, { recursive: true, force: true });
       } catch (cleanupError) {
@@ -329,39 +354,112 @@ temp/
     },
     projectDir: string
   ): Promise<SyncResult> {
-    // 获取当前 commit
-    const { stdout: beforeCommit } = await execAsync(
-      'git rev-parse HEAD',
-      { cwd: projectDir }
-    );
-    
     // 更新远程 URL（token 可能已更新）
     const authenticatedUrl = await this.buildAuthenticatedUrl(
       project.git_url,
       project.git_token
     );
     
-    await execAsync(
-      `git remote set-url origin ${authenticatedUrl}`,
-      { cwd: projectDir }
-    );
+    // 检查是否有远程仓库
+    try {
+      await execAsync(
+        `git remote get-url origin`,
+        { cwd: projectDir }
+      );
+      // 更新远程 URL
+      await execAsync(
+        `git remote set-url origin ${authenticatedUrl}`,
+        { cwd: projectDir }
+      );
+    } catch {
+      // 没有 remote，添加一个
+      await execAsync(
+        `git remote add origin ${authenticatedUrl}`,
+        { cwd: projectDir }
+      );
+    }
     
     // 拉取最新代码
     console.log(`拉取更新: ${project.git_url}`);
     
+    // fetch 远程分支
     await execAsync(
       `git fetch origin ${project.git_branch}`,
       { cwd: projectDir }
     );
     
-    // 检查是否有更新
-    const { stdout: localCommit } = await execAsync(
-      'git rev-parse HEAD',
+    // 检查本地是否有 commit（可能是空仓库）
+    let hasLocalCommit = false;
+    try {
+      await execAsync('git rev-parse HEAD', { cwd: projectDir });
+      hasLocalCommit = true;
+    } catch {
+      // 本地没有 commit，是空仓库
+      hasLocalCommit = false;
+    }
+    
+    // 检查远程是否有该分支
+    let hasRemoteBranch = false;
+    try {
+      await execAsync(
+        `git rev-parse origin/${project.git_branch}`,
+        { cwd: projectDir }
+      );
+      hasRemoteBranch = true;
+    } catch {
+      hasRemoteBranch = false;
+    }
+    
+    // 如果远程没有分支，返回空结果
+    if (!hasRemoteBranch) {
+      console.log(`远程分支 ${project.git_branch} 不存在`);
+      return {
+        commitSha: '',
+        commitsCount: 0,
+        changes: {
+          added: [],
+          modified: [],
+          deleted: []
+        }
+      };
+    }
+    
+    // 获取远程 commit
+    const { stdout: remoteCommit } = await execAsync(
+      `git rev-parse origin/${project.git_branch}`,
       { cwd: projectDir }
     );
     
-    const { stdout: remoteCommit } = await execAsync(
-      `git rev-parse origin/${project.git_branch}`,
+    // 如果本地没有 commit，直接 checkout 远程分支
+    if (!hasLocalCommit) {
+      console.log(`本地仓库为空，checkout 远程分支`);
+      await execAsync(
+        `git checkout -b ${project.git_branch} origin/${project.git_branch}`,
+        { cwd: projectDir }
+      );
+      
+      // 获取文件列表
+      const { stdout: files } = await execAsync(
+        'git ls-tree --name-only -r HEAD',
+        { cwd: projectDir }
+      );
+      
+      const allFiles = files.trim().split('\n').filter(Boolean);
+      
+      return {
+        commitSha: remoteCommit.trim(),
+        commitsCount: 1,
+        changes: {
+          added: allFiles,
+          modified: [],
+          deleted: []
+        }
+      };
+    }
+    
+    // 正常流程：本地有 commit
+    const { stdout: localCommit } = await execAsync(
+      'git rev-parse HEAD',
       { cwd: projectDir }
     );
     
@@ -377,6 +475,12 @@ temp/
         }
       };
     }
+    
+    // 获取当前 commit（用于后续计算变更数量）
+    const { stdout: beforeCommit } = await execAsync(
+      'git rev-parse HEAD',
+      { cwd: projectDir }
+    );
     
     // 获取变更统计
     const { stdout: diffStat } = await execAsync(
