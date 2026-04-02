@@ -480,22 +480,30 @@ export default function AgentTemplatesPage() {
                       </Link>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-2">
-                      {roleConfigs.filter(r => r.is_active).map((role) => (
-                        <Button
-                          key={role.role_key}
-                          type="button"
-                          variant={selectedRole === role.role_key ? 'default' : 'outline'}
-                          className="h-auto py-2 px-3"
-                          onClick={() => handleRoleSelect(role.role_key)}
-                        >
-                          <div className="text-center">
-                            <div className="text-sm">{role.name}</div>
-                          </div>
-                        </Button>
-                      ))}
-                    </div>
+                    <Select
+                      value={selectedRole}
+                      onValueChange={(value) => handleRoleSelect(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择角色类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roleConfigs.filter(r => r.is_active).map((role) => (
+                          <SelectItem key={role.role_key} value={role.role_key}>
+                            <div className="flex flex-col">
+                              <span>{role.name}</span>
+                              {role.description && (
+                                <span className="text-xs text-muted-foreground">{role.description}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    选择角色后会自动填充对应的默认提示词
+                  </p>
                 </div>
 
                 <div className="space-y-2">
