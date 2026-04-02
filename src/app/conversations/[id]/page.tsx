@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,32 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   ArrowLeft,
   Send,
   Users,
   Bot,
   MessageSquare,
   Loader2,
-  Circle
+  Circle,
+  UserPlus,
+  MoreHorizontal,
+  Trash2,
+  AtSign
 } from 'lucide-react';
 import type { Conversation, Message } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
@@ -37,6 +56,19 @@ export default function ConversationDetailPage() {
   const [respondingAgent, setRespondingAgent] = useState<Agent | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  
+  // 管理参与者相关状态
+  const [showManageDialog, setShowManageDialog] = useState(false);
+  const [allAgents, setAllAgents] = useState<Agent[]>([]);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [loadingAgents, setLoadingAgents] = useState(false);
+  const [managingParticipants, setManagingParticipants] = useState(false);
+  
+  // @智能体唤起相关状态
+  const [showAgentMention, setShowAgentMention] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchConversation();
@@ -194,6 +226,149 @@ export default function ConversationDetailPage() {
     }
   };
 
+  // 获取所有可用的智能体
+  const fetchAllAgents = async () => {
+    setLoadingAgents(true);
+    try {
+      const response = await fetch('/api/agents?is_template=false');
+      const result = await response.json();
+      if (result.success) {
+        setAllAgents(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取智能体列表失败:', error);
+    } finally {
+      setLoadingAgents(false);
+    }
+  };
+
+  // 打开管理参与者弹窗
+  const handleOpenManageDialog = () => {
+    setShowManageDialog(true);
+    fetchAllAgents();
+    setSelectedAgentIds(participants.map(p => p.id));
+  };
+
+  // 添加参与者
+  const handleAddParticipants = async () => {
+    const currentParticipantIds = participants.map(p => p.id);
+    const newAgentIds = selectedAgentIds.filter(id => !currentParticipantIds.includes(id));
+    
+    if (newAgentIds.length === 0) {
+      setShowManageDialog(false);
+      return;
+    }
+    
+    setManagingParticipants(true);
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_ids: newAgentIds })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // 刷新参与者列表
+        const participantsRes = await fetch(`/api/conversations/${conversationId}/participants`);
+        const participantsResult = await participantsRes.json();
+        if (participantsResult.success) {
+          setParticipants(participantsResult.data || []);
+        }
+        setShowManageDialog(false);
+      } else {
+        alert(result.error || '添加失败');
+      }
+    } catch (error) {
+      console.error('添加参与者失败:', error);
+      alert('添加失败');
+    } finally {
+      setManagingParticipants(false);
+    }
+  };
+
+  // 移除参与者
+  const handleRemoveParticipant = async (agentId: string) => {
+    if (!confirm('确定要移除该智能体吗？')) return;
+    
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/participants`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_id: agentId })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setParticipants(prev => prev.filter(p => p.id !== agentId));
+      } else {
+        alert(result.error || '移除失败');
+      }
+    } catch (error) {
+      console.error('移除参与者失败:', error);
+      alert('移除失败');
+    }
+  };
+
+  // 处理输入变化，检测@符号
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    
+    setInputMessage(value);
+    setCursorPosition(cursorPos);
+    
+    // 检测@符号
+    const lastAtIndex = value.lastIndexOf('@', cursorPos - 1);
+    if (lastAtIndex !== -1) {
+      const textAfterAt = value.slice(lastAtIndex + 1, cursorPos);
+      // 确保@后面没有空格（表示正在输入智能体名称）
+      if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
+        setMentionSearch(textAfterAt);
+        setShowAgentMention(true);
+      } else {
+        setShowAgentMention(false);
+      }
+    } else {
+      setShowAgentMention(false);
+    }
+  };
+
+  // 选择智能体进行@唤起
+  const handleSelectAgentMention = (agent: Agent) => {
+    const lastAtIndex = inputMessage.lastIndexOf('@', cursorPosition - 1);
+    if (lastAtIndex !== -1) {
+      const beforeAt = inputMessage.slice(0, lastAtIndex);
+      const afterCursor = inputMessage.slice(cursorPosition);
+      const newMessage = `${beforeAt}@${agent.name} ${afterCursor}`;
+      setInputMessage(newMessage);
+      setShowAgentMention(false);
+      
+      // 聚焦输入框并设置光标位置
+      setTimeout(() => {
+        if (inputRef.current) {
+          const newCursorPos = beforeAt.length + agent.name.length + 2;
+          inputRef.current.focus();
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        }
+      }, 0);
+    }
+  };
+
+  // 过滤可显示的智能体（用于@唤起）
+  const filteredAgentsForMention = useMemo(() => {
+    if (!mentionSearch) return participants;
+    return participants.filter(a => 
+      a.name.toLowerCase().includes(mentionSearch.toLowerCase())
+    );
+  }, [participants, mentionSearch]);
+
+  // 过滤可添加的智能体（不在当前会话中的）
+  const availableAgentsToAdd = useMemo(() => {
+    const currentIds = participants.map(p => p.id);
+    return allAgents.filter(a => !currentIds.includes(a.id));
+  }, [allAgents, participants]);
+
   // 获取健康状态颜色
   const getHealthStatus = (status?: string) => {
     const colors: Record<string, string> = {
@@ -255,7 +430,7 @@ export default function ConversationDetailPage() {
             {participants.map(agent => (
               <div 
                 key={agent.id}
-                className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer ${
+                className={`flex items-center gap-3 p-2 rounded-lg hover:bg-muted group ${
                   respondingAgent?.id === agent.id ? 'bg-primary/10' : ''
                 }`}
               >
@@ -274,9 +449,31 @@ export default function ConversationDetailPage() {
                 {respondingAgent?.id === agent.id && (
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 )}
+                {/* 移除参与者按钮 */}
+                {participants.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => handleRemoveParticipant(agent.id)}
+                  >
+                    <Trash2 className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </Button>
+                )}
               </div>
             ))}
           </div>
+          
+          {/* 添加参与者按钮 */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full mt-4"
+            onClick={handleOpenManageDialog}
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            添加参与者
+          </Button>
         </div>
       </div>
 
@@ -353,20 +550,52 @@ export default function ConversationDetailPage() {
 
         {/* 输入区域 */}
         <div className="border-t p-4">
-          <div className="flex gap-2">
-            <Input
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={aiResponding ? "AI 正在回复..." : "输入消息..."}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              className="flex-1"
-              disabled={aiResponding}
-            />
+          <div className="flex gap-2 relative">
+            <div className="flex-1 relative">
+              <Input
+                ref={inputRef}
+                value={inputMessage}
+                onChange={handleInputChange}
+                placeholder={aiResponding ? "AI 正在回复..." : "输入消息... (@智能体名称 可唤起指定智能体)"}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                className="flex-1"
+                disabled={aiResponding}
+              />
+              
+              {/* @智能体唤起下拉列表 */}
+              {showAgentMention && filteredAgentsForMention.length > 0 && (
+                <div className="absolute bottom-full left-0 mb-1 w-full max-w-xs bg-popover border rounded-lg shadow-lg z-10">
+                  <div className="p-2 text-xs text-muted-foreground flex items-center gap-1">
+                    <AtSign className="h-3 w-3" />
+                    选择要唤起的智能体
+                  </div>
+                  <ScrollArea className="max-h-40">
+                    {filteredAgentsForMention.map(agent => (
+                      <div
+                        key={agent.id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer"
+                        onClick={() => handleSelectAgentMention(agent)}
+                      >
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className="bg-primary/10">
+                            <Bot className="h-3 w-3" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{agent.name}</div>
+                        </div>
+                        <span className={`w-2 h-2 rounded-full ${getHealthStatus(agent.online_status)}`} />
+                      </div>
+                    ))}
+                  </ScrollArea>
+                </div>
+              )}
+            </div>
             <Button onClick={handleSendMessage} disabled={sending || aiResponding || !inputMessage.trim()}>
               {sending || aiResponding ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -377,6 +606,83 @@ export default function ConversationDetailPage() {
           </div>
         </div>
       </div>
+      
+      {/* 管理参与者弹窗 */}
+      <Dialog open={showManageDialog} onOpenChange={setShowManageDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>添加参与者</DialogTitle>
+            <DialogDescription>
+              选择要添加到会话的智能体
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {loadingAgents ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : availableAgentsToAdd.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <Bot className="h-8 w-8 mx-auto mb-2" />
+                <p>暂无可添加的智能体</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-64">
+                <div className="space-y-2">
+                  {availableAgentsToAdd.map(agent => (
+                    <div
+                      key={agent.id}
+                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted cursor-pointer"
+                      onClick={() => {
+                        setSelectedAgentIds(prev => 
+                          prev.includes(agent.id)
+                            ? prev.filter(id => id !== agent.id)
+                            : [...prev, agent.id]
+                        );
+                      }}
+                    >
+                      <Checkbox
+                        checked={selectedAgentIds.includes(agent.id)}
+                        onChange={() => {}}
+                      />
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10">
+                          <Bot className="h-4 w-4" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{agent.name}</div>
+                        <div className="text-xs text-muted-foreground">{agent.role}</div>
+                      </div>
+                      <span className={`w-2 h-2 rounded-full ${getHealthStatus(agent.online_status)}`} />
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+          
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setShowManageDialog(false)}>
+              取消
+            </Button>
+            <Button 
+              onClick={handleAddParticipants}
+              disabled={managingParticipants || selectedAgentIds.filter(id => !participants.map(p => p.id).includes(id)).length === 0}
+            >
+              {managingParticipants ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  添加中...
+                </>
+              ) : (
+                '添加'
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -102,14 +102,32 @@ export async function POST(request: NextRequest) {
         targetAgent = found.agents;
       }
     } else if (auto_detect !== false) {
-      // 自动识别：检查消息中是否包含智能体名字
-      const lowerMessage = user_message.toLowerCase();
+      // 自动识别：优先检查消息中是否包含 @智能体名称 格式
+      const mentionMatch = user_message.match(/@([^\s@]+)/g);
+      if (mentionMatch) {
+        for (const match of mentionMatch) {
+          const mentionName = match.slice(1).toLowerCase(); // 去掉@符号
+          for (const p of participants) {
+            const agent = p.agents as unknown as Agent;
+            if (agent.name && agent.name.toLowerCase() === mentionName) {
+              targetAgent = agent;
+              break;
+            }
+          }
+          if (targetAgent) break;
+        }
+      }
       
-      for (const p of participants) {
-        const agent = p.agents as unknown as Agent;
-        if (agent.name && lowerMessage.includes(agent.name.toLowerCase())) {
-          targetAgent = agent;
-          break;
+      // 如果没有通过@识别到，检查消息中是否包含智能体名字
+      if (!targetAgent) {
+        const lowerMessage = user_message.toLowerCase();
+        
+        for (const p of participants) {
+          const agent = p.agents as unknown as Agent;
+          if (agent.name && lowerMessage.includes(agent.name.toLowerCase())) {
+            targetAgent = agent;
+            break;
+          }
         }
       }
       

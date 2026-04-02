@@ -57,6 +57,8 @@ import {
   Copy,
   MessageSquare,
   CheckCircle2,
+  AlertCircle,
+  Activity,
   Users,
   User,
   Globe,
@@ -83,6 +85,15 @@ export default function ProjectResourcesPage() {
   const [showCreateTicket, setShowCreateTicket] = useState(false);
   const [showCreateConversation, setShowCreateConversation] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string } | null>(null);
+  
+  // 健康检测状态
+  const [batchChecking, setBatchChecking] = useState(false);
+  const [batchCheckResult, setBatchCheckResult] = useState<{
+    total: number;
+    healthy: number;
+    unhealthy: number;
+  } | null>(null);
+  const [checkingAgents, setCheckingAgents] = useState<Set<string>>(new Set());
   
   // 创建表单
   const [newAgent, setNewAgent] = useState({ name: '', role: 'developer', system_prompt: '' });
@@ -263,6 +274,69 @@ export default function ProjectResourcesPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 单个智能体健康检测
+  const handleHealthCheck = async (agentId: string) => {
+    setCheckingAgents(prev => new Set(prev).add(agentId));
+    
+    try {
+      const response = await fetch(`/api/agents/${agentId}/health-check`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        // 更新智能体列表中的状态
+        setAgents(prev => prev.map(a => 
+          a.id === agentId 
+            ? { ...a, online_status: result.data?.online ? 'online' : 'offline' }
+            : a
+        ));
+      }
+    } catch (error) {
+      console.error('健康检测失败:', error);
+    } finally {
+      setCheckingAgents(prev => {
+        const next = new Set(prev);
+        next.delete(agentId);
+        return next;
+      });
+    }
+  };
+
+  // 一键健康检测
+  const handleBatchHealthCheck = async () => {
+    if (agents.length === 0) return;
+    
+    setBatchChecking(true);
+    setBatchCheckResult(null);
+    
+    let healthy = 0;
+    let unhealthy = 0;
+    
+    for (const agent of agents) {
+      try {
+        const response = await fetch(`/api/agents/${agent.id}/health-check`, {
+          method: 'POST'
+        });
+        
+        const result = await response.json();
+        if (result.success && result.data?.online) {
+          healthy++;
+        } else {
+          unhealthy++;
+        }
+      } catch {
+        unhealthy++;
+      }
+    }
+    
+    setBatchCheckResult({ total: agents.length, healthy, unhealthy });
+    setBatchChecking(false);
+    
+    // 刷新智能体列表
+    fetchResources();
   };
 
   // 创建流水线
@@ -556,7 +630,7 @@ export default function ProjectResourcesPage() {
         {/* 智能体列表 */}
         <TabsContent value="agents" className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {templates.length > 0 && canCreate && (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">从模板添加:</span>
@@ -574,11 +648,47 @@ export default function ProjectResourcesPage() {
                   ))}
                 </div>
               )}
+              
+              {/* 一键健康检测结果统计 */}
+              {batchCheckResult && (
+                <div className="flex items-center gap-4 px-4 py-2 bg-muted rounded-lg text-sm">
+                  <span className="text-muted-foreground">检测结果:</span>
+                  <span className="text-green-600 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="h-4 w-4" />
+                    健康 {batchCheckResult.healthy}
+                  </span>
+                  <span className="text-red-600 font-medium flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    异常 {batchCheckResult.unhealthy}
+                  </span>
+                </div>
+              )}
             </div>
-            <Button onClick={() => setShowCreateAgent(true)} disabled={!canCreate}>
-              <Plus className="h-4 w-4 mr-2" />
-              创建智能体
-            </Button>
+            
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                onClick={handleBatchHealthCheck}
+                disabled={batchChecking || agents.length === 0}
+              >
+                {batchChecking ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    检测中...
+                  </>
+                ) : (
+                  <>
+                    <Activity className="h-4 w-4 mr-2" />
+                    一键检测
+                  </>
+                )}
+              </Button>
+              
+              <Button onClick={() => setShowCreateAgent(true)} disabled={!canCreate}>
+                <Plus className="h-4 w-4 mr-2" />
+                创建智能体
+              </Button>
+            </div>
           </div>
 
           {loading ? (
@@ -608,6 +718,22 @@ export default function ProjectResourcesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem 
+                            onClick={() => handleHealthCheck(agent.id)}
+                            disabled={checkingAgents.has(agent.id)}
+                          >
+                            {checkingAgents.has(agent.id) ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                检测中...
+                              </>
+                            ) : (
+                              <>
+                                <Activity className="h-4 w-4 mr-2" />
+                                健康检测
+                              </>
+                            )}
+                          </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link href={`/agents/${agent.id}`}>
                               <Edit className="h-4 w-4 mr-2" />
