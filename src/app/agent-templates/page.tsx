@@ -484,16 +484,18 @@ export default function AgentTemplatesPage() {
                       value={selectedRole}
                       onValueChange={(value) => handleRoleSelect(value)}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full">
                         <SelectValue placeholder="选择角色类型" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-60 overflow-y-auto">
                         {roleConfigs.filter(r => r.is_active).map((role) => (
-                          <SelectItem key={role.role_key} value={role.role_key}>
-                            <div className="flex flex-col">
-                              <span>{role.name}</span>
+                          <SelectItem key={role.role_key} value={role.role_key} className="py-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{role.name}</span>
                               {role.description && (
-                                <span className="text-xs text-muted-foreground">{role.description}</span>
+                                <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                                  {role.description}
+                                </span>
                               )}
                             </div>
                           </SelectItem>
