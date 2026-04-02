@@ -534,10 +534,6 @@ export const agent_roles = pgTable(
     
     // 建议配置
     suggested_agent_type: varchar("suggested_agent_type", { length: 20 }).default("llm"), // llm, process
-    suggested_model: varchar("suggested_model", { length: 64 }),
-    suggested_temperature: real("suggested_temperature"),
-    suggested_thinking: varchar("suggested_thinking", { length: 20 }),
-    suggested_caching: varchar("suggested_caching", { length: 20 }),
     
     // 能力标签
     capability_tags: jsonb("capability_tags"), // string[]

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { DEFAULT_AGENT_ROLES, type AgentRoleConfig, type AgentRoleFormData } from '@/types/agent-role';
+import { DEFAULT_AGENT_ROLES, type AgentRoleFormData } from '@/types/agent-role';
 
 // 获取所有角色
 export async function GET() {
@@ -52,10 +52,6 @@ export async function POST(request: NextRequest) {
       description: body.description,
       system_prompt_template: body.system_prompt_template,
       suggested_agent_type: body.suggested_agent_type || 'llm',
-      suggested_model: body.suggested_model,
-      suggested_temperature: body.suggested_temperature,
-      suggested_thinking: body.suggested_thinking,
-      suggested_caching: body.suggested_caching,
       capability_tags: body.capability_tags || [],
       sort_order: body.sort_order || 0,
       is_active: body.is_active !== false
@@ -107,23 +103,5 @@ async function initializeDefaultRoles(): Promise<boolean> {
   } catch (error) {
     console.error('初始化默认角色失败:', error);
     return false;
-  }
-}
-
-// 批量初始化默认角色（用于手动触发）
-export async function PUT() {
-  try {
-    const initialized = await initializeDefaultRoles();
-    if (initialized) {
-      return NextResponse.json({ success: true, message: '默认角色初始化成功' });
-    } else {
-      return NextResponse.json({ success: false, error: '初始化失败' }, { status: 500 });
-    }
-  } catch (error) {
-    console.error('初始化默认角色失败:', error);
-    return NextResponse.json(
-      { success: false, error: '初始化失败' },
-      { status: 500 }
-    );
   }
 }

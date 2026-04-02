@@ -21,10 +21,6 @@ export interface AgentRoleConfig {
   
   // 建议配置
   suggested_agent_type?: 'llm' | 'process';
-  suggested_model?: string;
-  suggested_temperature?: number;
-  suggested_thinking?: 'enabled' | 'disabled';
-  suggested_caching?: 'enabled' | 'disabled';
   
   // 能力标签
   capability_tags?: string[];
@@ -45,10 +41,6 @@ export interface AgentRoleFormData {
   description?: string;
   system_prompt_template: string;
   suggested_agent_type?: 'llm' | 'process';
-  suggested_model?: string;
-  suggested_temperature?: number;
-  suggested_thinking?: 'enabled' | 'disabled';
-  suggested_caching?: 'enabled' | 'disabled';
   capability_tags?: string[];
   sort_order?: number;
   is_active?: boolean;
@@ -82,10 +74,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 请始终保持专业、高效的工作态度。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.3,
-    suggested_thinking: 'enabled',
-    suggested_caching: 'enabled',
     capability_tags: ['general'],
     sort_order: 1
   },
@@ -114,9 +102,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 完成开发后，主动通知后端工程师进行联调。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.3,
-    suggested_caching: 'enabled',
     capability_tags: ['frontend'],
     sort_order: 2
   },
@@ -146,9 +131,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 与前端工程师协作时，主动提供接口文档和测试数据。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.3,
-    suggested_caching: 'enabled',
     capability_tags: ['backend'],
     sort_order: 3
   },
@@ -177,9 +159,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 发现Bug时，清晰描述复现步骤和预期结果。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.2,
-    suggested_caching: 'enabled',
     capability_tags: ['testing'],
     sort_order: 4
   },
@@ -208,10 +187,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 审核通过后，给出明确的批准意见；有问题的代码，指出具体问题和改进建议。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.2,
-    suggested_thinking: 'enabled',
-    suggested_caching: 'enabled',
     capability_tags: ['review'],
     sort_order: 5
   },
@@ -240,10 +215,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 架构决策时，给出多个备选方案并分析各自优缺点。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.4,
-    suggested_thinking: 'enabled',
-    suggested_caching: 'enabled',
     capability_tags: ['architecture'],
     sort_order: 6
   },
@@ -272,9 +243,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 需求文档要清晰、完整、可执行，避免歧义。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.5,
-    suggested_caching: 'enabled',
     capability_tags: ['general'],
     sort_order: 7
   },
@@ -291,8 +259,6 @@ export const DEFAULT_AGENT_ROLES: AgentRoleFormData[] = [
 
 请根据具体任务提供专业的帮助。`,
     suggested_agent_type: 'llm',
-    suggested_model: 'doubao-seed-1-8-251228',
-    suggested_temperature: 0.7,
     capability_tags: ['general'],
     sort_order: 99
   }

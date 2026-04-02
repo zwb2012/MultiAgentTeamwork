@@ -38,8 +38,7 @@ import {
   Plus, 
   Trash2, 
   Edit, 
-  Shield, 
-  RefreshCw,
+  Shield,
   Loader2
 } from 'lucide-react';
 import type { AgentRoleConfig, AgentRoleFormData } from '@/types/agent-role';
@@ -60,8 +59,6 @@ export default function AgentRolesPage() {
     description: '',
     system_prompt_template: '',
     suggested_agent_type: 'llm',
-    suggested_model: '',
-    suggested_temperature: 0.3,
     capability_tags: [],
     sort_order: 0,
     is_active: true
@@ -172,28 +169,6 @@ export default function AgentRolesPage() {
     }
   };
 
-  const handleReinitialize = async () => {
-    if (!confirm('确定要重新初始化默认角色吗？这将添加缺失的默认角色。')) return;
-    
-    try {
-      const response = await fetch('/api/agent-roles', {
-        method: 'PUT'
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        alert('初始化成功');
-        fetchRoles();
-      } else {
-        alert('初始化失败: ' + result.error);
-      }
-    } catch (error) {
-      console.error('初始化失败:', error);
-      alert('初始化失败');
-    }
-  };
-
   const openEditDialog = (role: AgentRoleConfig) => {
     setEditingRole(role);
     setFormData({
@@ -202,10 +177,6 @@ export default function AgentRolesPage() {
       description: role.description || '',
       system_prompt_template: role.system_prompt_template,
       suggested_agent_type: role.suggested_agent_type || 'llm',
-      suggested_model: role.suggested_model || '',
-      suggested_temperature: role.suggested_temperature || 0.3,
-      suggested_thinking: role.suggested_thinking,
-      suggested_caching: role.suggested_caching,
       capability_tags: role.capability_tags || [],
       sort_order: role.sort_order || 0,
       is_active: role.is_active
@@ -220,8 +191,6 @@ export default function AgentRolesPage() {
       description: '',
       system_prompt_template: '',
       suggested_agent_type: 'llm',
-      suggested_model: '',
-      suggested_temperature: 0.3,
       capability_tags: [],
       sort_order: 0,
       is_active: true
@@ -243,10 +212,6 @@ export default function AgentRolesPage() {
         description: template.description || '',
         system_prompt_template: template.system_prompt_template,
         suggested_agent_type: template.suggested_agent_type || 'llm',
-        suggested_model: template.suggested_model || '',
-        suggested_temperature: template.suggested_temperature || 0.3,
-        suggested_thinking: template.suggested_thinking,
-        suggested_caching: template.suggested_caching,
         capability_tags: template.capability_tags || [],
         sort_order: template.sort_order || 0,
         is_active: true
@@ -261,21 +226,14 @@ export default function AgentRolesPage() {
         <div>
           <h1 className="text-3xl font-bold">角色管理</h1>
           <p className="text-muted-foreground mt-1">
-            管理智能体角色配置，定义默认提示词和建议参数
+            管理智能体角色配置，定义默认提示词
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={handleReinitialize}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            初始化默认角色
-          </Button>
-          
-          <Button onClick={openCreateDialog}>
-            <Plus className="h-4 w-4 mr-2" />
-            创建角色
-          </Button>
-        </div>
+        <Button onClick={openCreateDialog}>
+          <Plus className="h-4 w-4 mr-2" />
+          创建角色
+        </Button>
       </div>
 
       {/* 角色列表 */}
@@ -289,11 +247,11 @@ export default function AgentRolesPage() {
             <Users className="h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-2">暂无角色配置</p>
             <p className="text-sm text-muted-foreground mb-4">
-              点击"初始化默认角色"创建系统预设角色
+              点击"创建角色"添加第一个角色
             </p>
-            <Button onClick={handleReinitialize}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              初始化默认角色
+            <Button onClick={openCreateDialog}>
+              <Plus className="h-4 w-4 mr-2" />
+              创建角色
             </Button>
           </CardContent>
         </Card>
@@ -350,11 +308,6 @@ export default function AgentRolesPage() {
                   <Badge variant="outline" className="text-xs">
                     {role.suggested_agent_type === 'llm' ? 'LLM' : '进程'}
                   </Badge>
-                  {role.suggested_model && (
-                    <Badge variant="outline" className="text-xs">
-                      {role.suggested_model}
-                    </Badge>
-                  )}
                   {role.capability_tags?.map(tag => (
                     <Badge key={tag} variant="secondary" className="text-xs">
                       {tag}
@@ -449,29 +402,6 @@ export default function AgentRolesPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>建议模型</Label>
-                <Input
-                  value={formData.suggested_model || ''}
-                  onChange={(e) => setFormData({ ...formData, suggested_model: e.target.value })}
-                  placeholder="doubao-seed-1-8-251228"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>建议温度</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  value={formData.suggested_temperature || 0.3}
-                  onChange={(e) => setFormData({ ...formData, suggested_temperature: parseFloat(e.target.value) })}
-                />
-              </div>
-            </div>
-
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 取消
@@ -537,28 +467,6 @@ export default function AgentRolesPage() {
                 onChange={(e) => setFormData({ ...formData, system_prompt_template: e.target.value })}
                 rows={10}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>建议模型</Label>
-                <Input
-                  value={formData.suggested_model || ''}
-                  onChange={(e) => setFormData({ ...formData, suggested_model: e.target.value })}
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label>建议温度</Label>
-                <Input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  value={formData.suggested_temperature || 0.3}
-                  onChange={(e) => setFormData({ ...formData, suggested_temperature: parseFloat(e.target.value) })}
-                />
-              </div>
             </div>
 
             <div className="flex items-center gap-2">
