@@ -292,10 +292,8 @@ export default function ConversationDetailPage() {
     if (!confirm('确定要移除该智能体吗？')) return;
     
     try {
-      const response = await fetch(`/api/conversations/${conversationId}/participants`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: agentId })
+      const response = await fetch(`/api/conversations/${conversationId}/participants?agent_id=${agentId}`, {
+        method: 'DELETE'
       });
       
       const result = await response.json();

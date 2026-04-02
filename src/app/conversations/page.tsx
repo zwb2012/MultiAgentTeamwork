@@ -301,10 +301,8 @@ export default function ConversationsPage() {
     if (!managingConversation) return;
     
     try {
-      const response = await fetch(`/api/conversations/${managingConversation.id}/participants`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: agentId })
+      const response = await fetch(`/api/conversations/${managingConversation.id}/participants?agent_id=${agentId}`, {
+        method: 'DELETE'
       });
       
       const result = await response.json();

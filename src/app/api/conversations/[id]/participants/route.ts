@@ -166,8 +166,9 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { agent_id } = body;
+    // 从 URL 查询参数获取 agent_id
+    const { searchParams } = new URL(request.url);
+    const agent_id = searchParams.get('agent_id');
     
     if (!agent_id) {
       return NextResponse.json(
@@ -177,6 +178,23 @@ export async function DELETE(
     }
     
     const client = getSupabaseClient();
+    
+    // 检查是否是最后一个参与者
+    const { data: participants, error: countError } = await client
+      .from('conversation_participants')
+      .select('agent_id')
+      .eq('conversation_id', id);
+    
+    if (countError) {
+      throw new Error(`查询参与者失败: ${countError.message}`);
+    }
+    
+    if (participants && participants.length <= 1) {
+      return NextResponse.json(
+        { success: false, error: '至少需要保留一个参与者' },
+        { status: 400 }
+      );
+    }
     
     // 移除参与者
     const { error } = await client
