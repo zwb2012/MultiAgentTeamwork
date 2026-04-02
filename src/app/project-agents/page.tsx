@@ -325,6 +325,55 @@ export default function ProjectAgentsPage() {
     setCreateFromTemplate(false);
   };
 
+  // 根据角色生成默认提示词
+  const generateDefaultPrompt = (role: AgentRole, agentName: string): string => {
+    const roleTemplate = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
+    if (roleTemplate) {
+      // 使用提供的名称，如果没有则使用角色名称
+      const nameToUse = agentName || roleTemplate.name;
+      return roleTemplate.system_prompt.replace(/{name}/g, nameToUse);
+    }
+    return '';
+  };
+
+  // 处理角色变化
+  const handleRoleChange = (role: AgentRole) => {
+    const defaultPrompt = generateDefaultPrompt(role, formData.name);
+    setFormData(prev => ({
+      ...prev,
+      role,
+      system_prompt: defaultPrompt
+    }));
+  };
+
+  // 处理名称变化（同步更新提示词中的{name}）
+  const handleNameChange = (name: string) => {
+    // 如果提示词为空或包含 {name} 占位符，则重新生成提示词
+    const hasPlaceholder = formData.system_prompt.includes('{name}');
+    const isEmpty = !formData.system_prompt.trim();
+    
+    if (hasPlaceholder || isEmpty) {
+      const roleTemplate = AGENT_ROLE_TEMPLATES.find(t => t.role === formData.role);
+      let newPrompt = formData.system_prompt;
+      
+      if (roleTemplate && (isEmpty || hasPlaceholder)) {
+        // 重新生成提示词，使用新的名称
+        newPrompt = roleTemplate.system_prompt.replace(/{name}/g, name || roleTemplate.name);
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        name,
+        system_prompt: newPrompt
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        name
+      }));
+    }
+  };
+
   const handleDeleteAgent = async (agentId: string) => {
     if (!confirm('确定要删除这个智能体吗？')) return;
     
@@ -564,7 +613,14 @@ export default function ProjectAgentsPage() {
             )}
           </Button>
           
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (open && !createFromTemplate && !formData.system_prompt) {
+              // 打开对话框时，如果不在模板模式且没有提示词，自动填充默认提示词
+              const defaultPrompt = generateDefaultPrompt(formData.role, formData.name);
+              setFormData(prev => ({ ...prev, system_prompt: defaultPrompt }));
+            }
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <Plus className="h-4 w-4 mr-2" />
@@ -593,7 +649,13 @@ export default function ProjectAgentsPage() {
                   onCheckedChange={(checked) => {
                     setCreateFromTemplate(checked);
                     if (!checked) {
-                      setFormData({ ...formData, template_id: null });
+                      // 关闭模板模式时，重置表单并填充默认提示词
+                      const defaultPrompt = generateDefaultPrompt(formData.role, formData.name);
+                      setFormData(prev => ({
+                        ...prev,
+                        template_id: null,
+                        system_prompt: prev.system_prompt || defaultPrompt
+                      }));
                     }
                   }}
                 />
@@ -872,13 +934,60 @@ export default function ProjectAgentsPage() {
                   <Input
                     id="name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => handleNameChange(e.target.value)}
                     placeholder="例如：开发工程师、代码审核员"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    智能体会通过这个名字识别自己
+                  </p>
                 </div>
 
+                {/* 角色选择（仅在不使用模板时显示） */}
+                {!createFromTemplate && (
+                  <div className="space-y-2">
+                    <Label>角色类型</Label>
+                    <Select
+                      value={formData.role}
+                      onValueChange={(value) => handleRoleChange(value as AgentRole)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择角色类型" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AGENT_ROLE_TEMPLATES.map(template => (
+                          <SelectItem key={template.role} value={template.role}>
+                            <div className="flex flex-col">
+                              <span>{template.name}</span>
+                              <span className="text-xs text-muted-foreground">{template.description}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      选择角色后会自动填充对应的默认提示词
+                    </p>
+                  </div>
+                )}
+
                 <div className="space-y-2">
-                  <Label htmlFor="system_prompt">系统提示词</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="system_prompt">系统提示词</Label>
+                    {!createFromTemplate && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs h-6"
+                        onClick={() => {
+                          const defaultPrompt = generateDefaultPrompt(formData.role, formData.name);
+                          setFormData(prev => ({ ...prev, system_prompt: defaultPrompt }));
+                        }}
+                      >
+                        重置为默认
+                      </Button>
+                    )}
+                  </div>
                   <Textarea
                     id="system_prompt"
                     value={formData.system_prompt}
