@@ -2,6 +2,8 @@
  * 项目管理相关类型定义
  */
 
+import type { TicketType } from './pipeline';
+
 // 同步状态
 export type SyncStatus = 
   | 'pending'   // 待同步
@@ -45,6 +47,14 @@ export interface LocalPathConfig {
   default?: string;  // 例如: /tmp/projects/my-project
 }
 
+// 默认流水线配置（按工单类型）
+export interface DefaultPipelines {
+  bug?: string;         // Bug修复流水线ID
+  feature?: string;     // 新需求流水线ID
+  improvement?: string; // 改进优化流水线ID
+  task?: string;        // 通用任务流水线ID
+}
+
 // 项目
 export interface Project {
   id: string;
@@ -74,6 +84,9 @@ export interface Project {
   
   // 实际使用的本地路径（运行时确定）
   local_path?: string;
+  
+  // 默认流水线配置（按工单类型）
+  default_pipelines?: DefaultPipelines;
   
   // 项目配置
   config?: ProjectConfig;

@@ -124,7 +124,7 @@ function findTicketPath(id: string): { path: string; status: TicketStatus } | nu
 /**
  * 获取所有工单
  */
-export function getAllTickets(): any[] {
+export function getAllTickets(projectId?: string): any[] {
   const tickets: any[] = [];
   
   for (const status of TICKET_STATUS_DIRS) {
@@ -137,6 +137,12 @@ export function getAllTickets(): any[] {
       
       if (content) {
         const { data, body } = parseFrontmatter(content);
+        
+        // 如果指定了项目ID，过滤
+        if (projectId && data.project_id !== projectId) {
+          continue;
+        }
+        
         tickets.push({
           id: file.replace('.md', ''),
           title: data.title || '未命名工单',
@@ -144,6 +150,7 @@ export function getAllTickets(): any[] {
           type: data.type || 'bug',
           priority: data.priority || 'medium',
           status,
+          project_id: data.project_id,
           assignee_id: data.assignee_id,
           assignee: data.assignee_name ? { name: data.assignee_name } : null,
           created_at: data.created_at || new Date().toISOString(),
@@ -192,6 +199,7 @@ export function createTicket(data: {
   title: string;
   description?: string;
   priority: TicketPriority;
+  project_id?: string;
   assignee_id?: string;
   assignee_name?: string;
 }): any {
@@ -202,6 +210,7 @@ export function createTicket(data: {
     title: data.title,
     type: data.type,
     priority: data.priority,
+    project_id: data.project_id || '',
     assignee_id: data.assignee_id || '',
     assignee_name: data.assignee_name || '',
     reporter_id: '',

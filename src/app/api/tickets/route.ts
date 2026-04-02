@@ -11,13 +11,14 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const stats = searchParams.get('stats');
+    const projectId = searchParams.get('project_id');
     
     if (stats === 'true') {
       const ticketStats = getTicketStats();
       return NextResponse.json({ success: true, data: ticketStats });
     }
     
-    const tickets = getAllTickets();
+    const tickets = getAllTickets(projectId || undefined);
     
     return NextResponse.json({ 
       success: true, 
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
       title, 
       description, 
       priority, 
+      project_id,
       assignee_id,
       assignee_name 
     } = body;
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest) {
       title,
       description: description || '',
       priority: priority as TicketPriority || 'medium',
+      project_id,
       assignee_id,
       assignee_name
     });

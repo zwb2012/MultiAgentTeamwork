@@ -1,0 +1,634 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  ArrowLeft,
+  Ticket as TicketIcon, 
+  Plus,
+  Bug,
+  Lightbulb,
+  Wrench,
+  ClipboardList,
+  MoreVertical,
+  Play,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  GitBranch,
+  Settings
+} from 'lucide-react';
+import type { Project, DefaultPipelines } from '@/types/project';
+import type { Pipeline, TicketType, PipelineRunStatus } from '@/types/pipeline';
+import type { TicketPriority } from '@/types/agent';
+
+// 工单类型配置
+const TICKET_TYPE_CONFIG = {
+  bug: { label: 'Bug 修复', icon: Bug, color: 'text-red-500' },
+  feature: { label: '新需求', icon: Lightbulb, color: 'text-blue-500' },
+  improvement: { label: '改进优化', icon: Wrench, color: 'text-green-500' },
+  task: { label: '通用任务', icon: ClipboardList, color: 'text-gray-500' }
+};
+
+// 优先级配置
+const PRIORITY_CONFIG = {
+  low: { label: '低', color: 'bg-gray-100 text-gray-700' },
+  medium: { label: '中', color: 'bg-blue-100 text-blue-700' },
+  high: { label: '高', color: 'bg-orange-100 text-orange-700' },
+  critical: { label: '紧急', color: 'bg-red-100 text-red-700' }
+};
+
+// 状态配置
+const STATUS_CONFIG = {
+  open: { label: '待处理', color: 'bg-yellow-100 text-yellow-700' },
+  in_progress: { label: '处理中', color: 'bg-blue-100 text-blue-700' },
+  resolved: { label: '已解决', color: 'bg-green-100 text-green-700' },
+  closed: { label: '已关闭', color: 'bg-gray-100 text-gray-500' }
+};
+
+interface Ticket {
+  id: string;
+  title: string;
+  description?: string;
+  type: TicketType;
+  priority: TicketPriority;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  project_id?: string;
+  assignee_id?: string;
+  created_at: string;
+  pipeline_run_id?: string;
+  pipeline_run_status?: PipelineRunStatus;
+}
+
+export default function ProjectTicketsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const projectId = params.id as string;
+  
+  const [project, setProject] = useState<Project | null>(null);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // 创建工单对话框
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    type: 'bug' as TicketType,
+    title: '',
+    description: '',
+    priority: 'medium' as TicketPriority
+  });
+  
+  // 执行流水线对话框
+  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string>('');
+  const [executing, setExecuting] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, [projectId]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // 并行获取项目、工单、流水线
+      const [projectRes, ticketsRes, pipelinesRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`),
+        fetch(`/api/tickets?project_id=${projectId}`),
+        fetch('/api/pipelines')
+      ]);
+      
+      const projectData = await projectRes.json();
+      const ticketsData = await ticketsRes.json();
+      const pipelinesData = await pipelinesRes.json();
+      
+      if (projectData.success) {
+        setProject(projectData.data);
+      } else {
+        alert('项目不存在');
+        router.push('/projects');
+        return;
+      }
+      
+      if (ticketsData.success) {
+        setTickets(ticketsData.data);
+      }
+      
+      if (pipelinesData.success) {
+        // 只显示已发布的流水线
+        setPipelines(pipelinesData.data.filter((p: Pipeline) => p.status === 'published'));
+      }
+    } catch (error) {
+      console.error('获取数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 创建工单
+  const handleCreateTicket = async () => {
+    if (!createForm.title) {
+      alert('请输入工单标题');
+      return;
+    }
+    
+    try {
+      setCreating(true);
+      
+      const response = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...createForm,
+          project_id: projectId
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setCreateDialogOpen(false);
+        setCreateForm({
+          type: 'bug',
+          title: '',
+          description: '',
+          priority: 'medium'
+        });
+        fetchData();
+      } else {
+        alert('创建失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('创建工单失败:', error);
+      alert('创建失败');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // 打开执行对话框
+  const openExecuteDialog = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    // 自动选择推荐的流水线
+    const recommendedPipelineId = getRecommendedPipelineId(ticket.type);
+    setSelectedPipelineId(recommendedPipelineId || '');
+    setExecuteDialogOpen(true);
+  };
+
+  // 获取推荐的流水线ID
+  const getRecommendedPipelineId = (ticketType: TicketType): string | null => {
+    if (!project?.default_pipelines) return null;
+    
+    const defaultPipelines = project.default_pipelines as DefaultPipelines;
+    return defaultPipelines[ticketType] || null;
+  };
+
+  // 执行流水线
+  const handleExecutePipeline = async () => {
+    if (!selectedTicket || !selectedPipelineId) {
+      alert('请选择流水线');
+      return;
+    }
+    
+    try {
+      setExecuting(true);
+      
+      const response = await fetch(`/api/pipelines/${selectedPipelineId}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket: {
+            id: selectedTicket.id,
+            type: selectedTicket.type,
+            title: selectedTicket.title,
+            description: selectedTicket.description || '',
+            priority: selectedTicket.priority
+          }
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setExecuteDialogOpen(false);
+        fetchData();
+        alert('流水线已开始执行');
+      } else {
+        alert('执行失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('执行失败:', error);
+      alert('执行失败');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  // 获取流水线名称
+  const getPipelineName = (id: string) => {
+    return pipelines.find(p => p.id === id)?.name || '未知流水线';
+  };
+
+  // 过滤工单
+  const filterTickets = (status?: string) => {
+    if (!status) return tickets;
+    return tickets.filter(t => t.status === status);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-16 items-center justify-between px-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild>
+              <Link href={`/projects/${projectId}`}>
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold">{project?.name} - 工单管理</h1>
+              <p className="text-sm text-muted-foreground">创建和管理项目工单</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Link href={`/projects/${projectId}`}>
+              <Button variant="outline" size="sm">
+                <Settings className="h-4 w-4 mr-2" />
+                项目设置
+              </Button>
+            </Link>
+            <Button onClick={() => setCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              新建工单
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <main className="container px-4 py-6">
+        {/* 统计卡片 */}
+        <div className="grid gap-4 md:grid-cols-4 mb-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">待处理</p>
+                  <p className="text-2xl font-bold">{filterTickets('open').length}</p>
+                </div>
+                <Clock className="h-8 w-8 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">处理中</p>
+                  <p className="text-2xl font-bold">{filterTickets('in_progress').length}</p>
+                </div>
+                <Loader2 className="h-8 w-8 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">已解决</p>
+                  <p className="text-2xl font-bold">{filterTickets('resolved').length}</p>
+                </div>
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">已关闭</p>
+                  <p className="text-2xl font-bold">{filterTickets('closed').length}</p>
+                </div>
+                <XCircle className="h-8 w-8 text-gray-500" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 工单列表 */}
+        <Tabs defaultValue="open" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="open">待处理 ({filterTickets('open').length})</TabsTrigger>
+            <TabsTrigger value="in_progress">处理中 ({filterTickets('in_progress').length})</TabsTrigger>
+            <TabsTrigger value="resolved">已解决 ({filterTickets('resolved').length})</TabsTrigger>
+            <TabsTrigger value="closed">已关闭 ({filterTickets('closed').length})</TabsTrigger>
+          </TabsList>
+          
+          {['open', 'in_progress', 'resolved', 'closed'].map(status => (
+            <TabsContent key={status} value={status}>
+              {filterTickets(status).length === 0 ? (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <TicketIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">暂无工单</p>
+                    {status === 'open' && (
+                      <Button className="mt-4" onClick={() => setCreateDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        新建工单
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {filterTickets(status).map(ticket => {
+                    const typeConfig = TICKET_TYPE_CONFIG[ticket.type] || TICKET_TYPE_CONFIG.task;
+                    const priorityConfig = PRIORITY_CONFIG[ticket.priority] || PRIORITY_CONFIG.medium;
+                    const statusConfig = STATUS_CONFIG[ticket.status] || STATUS_CONFIG.open;
+                    const TypeIcon = typeConfig.icon;
+                    
+                    return (
+                      <Card key={ticket.id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="py-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-start gap-4">
+                              <TypeIcon className={`h-5 w-5 mt-1 ${typeConfig.color}`} />
+                              <div>
+                                <h3 className="font-medium">{ticket.title}</h3>
+                                {ticket.description && (
+                                  <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                    {ticket.description}
+                                  </p>
+                                )}
+                                <div className="flex items-center gap-2 mt-2">
+                                  <Badge variant="outline" className={priorityConfig.color}>
+                                    {priorityConfig.label}
+                                  </Badge>
+                                  <Badge variant="outline" className={statusConfig.color}>
+                                    {statusConfig.label}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(ticket.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              {ticket.status === 'open' && pipelines.length > 0 && (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => openExecuteDialog(ticket)}
+                                >
+                                  <Play className="h-4 w-4 mr-1" />
+                                  执行流程
+                                </Button>
+                              )}
+                              
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem>
+                                    查看详情
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    编辑
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
+      </main>
+
+      {/* 创建工单对话框 */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>新建工单</DialogTitle>
+            <DialogDescription>
+              创建项目工单，可选择流水线自动执行
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>工单类型</Label>
+                <Select 
+                  value={createForm.type} 
+                  onValueChange={(value) => setCreateForm({ ...createForm, type: value as TicketType })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bug">Bug 修复</SelectItem>
+                    <SelectItem value="feature">新需求</SelectItem>
+                    <SelectItem value="improvement">改进优化</SelectItem>
+                    <SelectItem value="task">通用任务</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>优先级</Label>
+                <Select 
+                  value={createForm.priority} 
+                  onValueChange={(value) => setCreateForm({ ...createForm, priority: value as TicketPriority })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低</SelectItem>
+                    <SelectItem value="medium">中</SelectItem>
+                    <SelectItem value="high">高</SelectItem>
+                    <SelectItem value="critical">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label>工单标题 *</Label>
+              <Input
+                value={createForm.title}
+                onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                placeholder="例如：修复登录页面样式问题"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>详细描述</Label>
+              <Textarea
+                value={createForm.description}
+                onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                placeholder="描述具体需求或问题..."
+                rows={4}
+              />
+            </div>
+            
+            {/* 推荐流水线提示 */}
+            {project?.default_pipelines && createForm.type && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <GitBranch className="h-4 w-4" />
+                  <span>推荐流水线: {getPipelineName(getRecommendedPipelineId(createForm.type) || '')}</span>
+                </div>
+                <Link href={`/projects/${projectId}`} className="text-primary text-xs hover:underline">
+                  修改默认流水线配置
+                </Link>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleCreateTicket} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  创建中...
+                </>
+              ) : (
+                '创建工单'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 执行流水线对话框 */}
+      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>执行流水线</DialogTitle>
+            <DialogDescription>
+              选择流水线处理工单: {selectedTicket?.title}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>选择流水线</Label>
+              <Select 
+                value={selectedPipelineId} 
+                onValueChange={setSelectedPipelineId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="选择要执行的流水线" />
+                </SelectTrigger>
+                <SelectContent>
+                  {pipelines.map(pipeline => (
+                    <SelectItem key={pipeline.id} value={pipeline.id}>
+                      <div className="flex items-center gap-2">
+                        <GitBranch className="h-4 w-4" />
+                        <span>{pipeline.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {selectedPipelineId && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <p className="font-medium">{getPipelineName(selectedPipelineId)}</p>
+                <p className="text-muted-foreground mt-1">
+                  {pipelines.find(p => p.id === selectedPipelineId)?.description || '暂无描述'}
+                </p>
+              </div>
+            )}
+            
+            {pipelines.length === 0 && (
+              <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
+                <p>暂无可用的流水线</p>
+                <Link href="/pipelines/editor" className="text-primary text-sm hover:underline">
+                  创建流水线
+                </Link>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExecuteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              onClick={handleExecutePipeline} 
+              disabled={executing || !selectedPipelineId}
+            >
+              {executing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  执行中...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  开始执行
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -22,11 +22,14 @@ import {
   Loader2,
   RefreshCw,
   Save,
-  Folder
+  Folder,
+  Ticket,
+  Play
 } from 'lucide-react';
-import type { Project, LocalPathConfig } from '@/types/project';
+import type { Project, LocalPathConfig, DefaultPipelines } from '@/types/project';
 import { SYNC_STATUS_CONFIG, SYNC_INTERVAL_OPTIONS } from '@/types/project';
 import { LocalPathConfigInput } from '../components/local-path-config';
+import type { Pipeline, TicketType } from '@/types/pipeline';
 
 export default function EditProjectPage() {
   const router = useRouter();
@@ -34,6 +37,7 @@ export default function EditProjectPage() {
   const projectId = params.id as string;
   
   const [project, setProject] = useState<Project | null>(null);
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -47,7 +51,8 @@ export default function EditProjectPage() {
     git_token: '',
     sync_enabled: true,
     sync_interval: 300,
-    local_path_config: {} as LocalPathConfig
+    local_path_config: {} as LocalPathConfig,
+    default_pipelines: {} as DefaultPipelines
   });
 
   useEffect(() => {
@@ -57,11 +62,18 @@ export default function EditProjectPage() {
   const fetchProject = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/projects/${projectId}`);
-      const result = await response.json();
       
-      if (result.success) {
-        const data = result.data;
+      // 并行获取项目和流水线
+      const [projectRes, pipelinesRes] = await Promise.all([
+        fetch(`/api/projects/${projectId}`),
+        fetch('/api/pipelines')
+      ]);
+      
+      const projectResult = await projectRes.json();
+      const pipelinesResult = await pipelinesRes.json();
+      
+      if (projectResult.success) {
+        const data = projectResult.data;
         setProject(data);
         setFormData({
           name: data.name,
@@ -71,11 +83,17 @@ export default function EditProjectPage() {
           git_token: '', // 不显示已保存的token
           sync_enabled: data.sync_enabled,
           sync_interval: data.sync_interval,
-          local_path_config: data.local_path_config || {}
+          local_path_config: data.local_path_config || {},
+          default_pipelines: data.default_pipelines || {}
         });
       } else {
         alert('项目不存在');
         router.push('/projects');
+      }
+      
+      if (pipelinesResult.success) {
+        // 只显示已发布的流水线
+        setPipelines(pipelinesResult.data.filter((p: Pipeline) => p.status === 'published'));
       }
     } catch (error) {
       console.error('获取项目失败:', error);
@@ -100,7 +118,8 @@ export default function EditProjectPage() {
         git_branch: formData.git_branch,
         sync_enabled: formData.sync_enabled,
         sync_interval: formData.sync_interval,
-        local_path_config: formData.local_path_config
+        local_path_config: formData.local_path_config,
+        default_pipelines: formData.default_pipelines
       };
       
       // 只有输入了新token才更新
@@ -187,6 +206,12 @@ export default function EditProjectPage() {
         </div>
         
         <div className="flex gap-2">
+          <Link href={`/projects/${projectId}/tickets`}>
+            <Button variant="outline">
+              <Ticket className="h-4 w-4 mr-2" />
+              工单管理
+            </Button>
+          </Link>
           <Button 
             variant="outline" 
             onClick={handleSync}
@@ -213,6 +238,7 @@ export default function EditProjectPage() {
       <Tabs defaultValue="settings" className="space-y-6">
         <TabsList>
           <TabsTrigger value="settings">基本设置</TabsTrigger>
+          <TabsTrigger value="pipelines">默认流水线</TabsTrigger>
           <TabsTrigger value="sync">同步状态</TabsTrigger>
         </TabsList>
 
@@ -374,6 +400,144 @@ export default function EditProjectPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="pipelines">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Play className="h-5 w-5" />
+                默认流水线配置
+              </CardTitle>
+              <CardDescription>
+                为不同类型的工单配置默认执行的流水线
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {pipelines.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p>暂无可用的流水线</p>
+                  <Link href="/pipelines/editor" className="text-primary text-sm hover:underline mt-2 inline-block">
+                    创建流水线
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  {/* Bug 修复 */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <span className="text-red-500">🐛</span>
+                      Bug 修复
+                    </Label>
+                    <Select
+                      value={formData.default_pipelines?.bug || ''}
+                      onValueChange={(value) => setFormData({
+                        ...formData,
+                        default_pipelines: {
+                          ...formData.default_pipelines,
+                          bug: value || undefined
+                        }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择默认流水线" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">不设置</SelectItem>
+                        {pipelines.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 新需求 */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <span className="text-blue-500">💡</span>
+                      新需求
+                    </Label>
+                    <Select
+                      value={formData.default_pipelines?.feature || ''}
+                      onValueChange={(value) => setFormData({
+                        ...formData,
+                        default_pipelines: {
+                          ...formData.default_pipelines,
+                          feature: value || undefined
+                        }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择默认流水线" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">不设置</SelectItem>
+                        {pipelines.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 改进优化 */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <span className="text-green-500">🔧</span>
+                      改进优化
+                    </Label>
+                    <Select
+                      value={formData.default_pipelines?.improvement || ''}
+                      onValueChange={(value) => setFormData({
+                        ...formData,
+                        default_pipelines: {
+                          ...formData.default_pipelines,
+                          improvement: value || undefined
+                        }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择默认流水线" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">不设置</SelectItem>
+                        {pipelines.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 通用任务 */}
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <span className="text-gray-500">📋</span>
+                      通用任务
+                    </Label>
+                    <Select
+                      value={formData.default_pipelines?.task || ''}
+                      onValueChange={(value) => setFormData({
+                        ...formData,
+                        default_pipelines: {
+                          ...formData.default_pipelines,
+                          task: value || undefined
+                        }
+                      })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="选择默认流水线" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">不设置</SelectItem>
+                        {pipelines.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="sync">

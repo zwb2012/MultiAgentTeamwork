@@ -473,6 +473,10 @@ export const projects = pgTable(
     // 实际使用的本地路径（运行时确定）
     local_path: varchar("local_path", { length: 512 }),
     
+    // 默认流水线配置（按工单类型）
+    // 格式: { bug: "pipeline-id-1", feature: "pipeline-id-2", improvement: "pipeline-id-3", task: "pipeline-id-4" }
+    default_pipelines: jsonb("default_pipelines"),
+    
     // 项目配置
     config: jsonb("config"), // { build_command, test_command, deploy_command }
     
