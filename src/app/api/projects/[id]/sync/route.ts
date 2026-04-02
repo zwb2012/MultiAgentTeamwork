@@ -128,7 +128,7 @@ export async function GET(
 // 执行同步（异步）
 async function executeSync(
   projectId: string,
-  project: any,
+  project: Record<string, unknown>,
   syncHistoryId: string
 ) {
   const client = getSupabaseClient();
@@ -137,18 +137,34 @@ async function executeSync(
     const syncService = new GitSyncService();
     
     // 执行同步
-    const result = await syncService.syncProject(project);
+    const result = await syncService.syncProject({
+      id: project.id as string,
+      name: project.name as string,
+      description: project.description as string | undefined,
+      git_url: project.git_url as string,
+      git_branch: project.git_branch as string,
+      git_token: project.git_token as string | undefined,
+      local_path: project.local_path as string | undefined,
+      last_commit_sha: project.last_commit_sha as string | undefined
+    });
     
     // 更新同步历史
+    const updateData: Record<string, unknown> = {
+      status: 'success',
+      after_commit_sha: result.commitSha,
+      commits_count: result.commitsCount,
+      changes: result.changes,
+      completed_at: new Date()
+    };
+    
+    // 如果是新初始化的项目，记录到错误信息中作为提示
+    if (result.isNewInit) {
+      updateData.error_message = '[INFO] 项目已在本地创建并初始化';
+    }
+    
     await client
       .from('project_sync_history')
-      .update({
-        status: 'success',
-        after_commit_sha: result.commitSha,
-        commits_count: result.commitsCount,
-        changes: result.changes,
-        completed_at: new Date()
-      })
+      .update(updateData)
       .eq('id', syncHistoryId);
     
     // 更新项目状态
@@ -159,7 +175,7 @@ async function executeSync(
         last_sync_at: new Date(),
         last_commit_sha: result.commitSha,
         next_sync_at: project.sync_enabled 
-          ? new Date(Date.now() + project.sync_interval * 1000)
+          ? new Date(Date.now() + (project.sync_interval as number) * 1000)
           : null,
         sync_error: null,
         updated_at: new Date()
@@ -186,7 +202,7 @@ async function executeSync(
         sync_status: 'failed',
         sync_error: error instanceof Error ? error.message : '未知错误',
         next_sync_at: project.sync_enabled 
-          ? new Date(Date.now() + project.sync_interval * 1000)
+          ? new Date(Date.now() + (project.sync_interval as number) * 1000)
           : null,
         updated_at: new Date()
       })

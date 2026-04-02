@@ -20,6 +20,16 @@ export interface SyncResult {
     modified: string[];
     deleted: string[];
   };
+  // 新增：是否为新初始化的项目
+  isNewInit?: boolean;
+}
+
+// 远程仓库状态
+export interface RemoteStatus {
+  exists: boolean;       // 远程仓库是否存在
+  initialized: boolean;  // 是否已初始化（有提交）
+  isEmpty: boolean;      // 是否为空仓库
+  hasReadme: boolean;    // 是否有 README
 }
 
 export class GitSyncService {
@@ -31,10 +41,82 @@ export class GitSyncService {
   }
 
   /**
+   * 检查远程仓库状态
+   */
+  async checkRemoteStatus(
+    gitUrl: string,
+    encryptedToken?: string
+  ): Promise<RemoteStatus> {
+    const authenticatedUrl = await this.buildAuthenticatedUrl(gitUrl, encryptedToken);
+    
+    try {
+      // 尝试获取远程仓库信息
+      const { stdout: lsRemote } = await execAsync(
+        `git ls-remote --heads --tags ${authenticatedUrl}`,
+        { timeout: 30000 }
+      );
+      
+      // 如果有输出，说明仓库存在且有引用
+      if (lsRemote.trim()) {
+        return {
+          exists: true,
+          initialized: true,
+          isEmpty: false,
+          hasReadme: lsRemote.includes('refs/heads/')
+        };
+      }
+      
+      // 仓库存在但是空的
+      return {
+        exists: true,
+        initialized: false,
+        isEmpty: true,
+        hasReadme: false
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '';
+      
+      // 检查是否是因为仓库不存在
+      if (errorMessage.includes('Repository not found') || 
+          errorMessage.includes('does not exist') ||
+          errorMessage.includes('404')) {
+        return {
+          exists: false,
+          initialized: false,
+          isEmpty: true,
+          hasReadme: false
+        };
+      }
+      
+      // 其他错误（可能是空仓库）
+      if (errorMessage.includes('empty repository') || 
+          errorMessage.includes('no references')) {
+        return {
+          exists: true,
+          initialized: false,
+          isEmpty: true,
+          hasReadme: false
+        };
+      }
+      
+      // 无法确定状态，假设仓库不存在
+      console.error('检查远程仓库状态失败:', errorMessage);
+      return {
+        exists: false,
+        initialized: false,
+        isEmpty: true,
+        hasReadme: false
+      };
+    }
+  }
+
+  /**
    * 同步项目
    */
   async syncProject(project: {
     id: string;
+    name: string;
+    description?: string;
     git_url: string;
     git_branch: string;
     git_token?: string;
@@ -53,9 +135,139 @@ export class GitSyncService {
       // 拉取最新代码
       return await this.pullProject(project, projectDir);
     } else {
-      // 克隆项目
-      return await this.cloneProject(project, projectDir);
+      // 检查远程仓库状态
+      const remoteStatus = await this.checkRemoteStatus(project.git_url, project.git_token);
+      
+      if (!remoteStatus.exists || !remoteStatus.initialized) {
+        // 远程仓库不存在或未初始化，本地创建并初始化
+        return await this.initLocalProject(project, projectDir, remoteStatus);
+      } else {
+        // 远程仓库已存在，正常克隆
+        return await this.cloneProject(project, projectDir);
+      }
     }
+  }
+
+  /**
+   * 初始化本地项目（当远程仓库不存在或未初始化时）
+   */
+  private async initLocalProject(
+    project: {
+      id: string;
+      name: string;
+      description?: string;
+      git_url: string;
+      git_branch: string;
+      git_token?: string;
+    },
+    projectDir: string,
+    _remoteStatus: RemoteStatus
+  ): Promise<SyncResult> {
+    console.log(`远程仓库未初始化，本地创建项目: ${project.name}`);
+    
+    // 创建项目目录
+    await fs.mkdir(projectDir, { recursive: true });
+    
+    // 初始化 Git 仓库
+    await execAsync('git init', { cwd: projectDir });
+    
+    // 设置默认分支
+    await execAsync(`git checkout -b ${project.git_branch}`, { cwd: projectDir });
+    
+    // 创建 README.md
+    const readmeContent = `# ${project.name}
+
+${project.description || '项目描述'}
+
+## 项目信息
+
+- 项目ID: ${project.id}
+- 创建时间: ${new Date().toLocaleString('zh-CN')}
+- 默认分支: ${project.git_branch}
+
+## 开始使用
+
+本项目由 AI Agent 协同平台自动创建。
+`;
+    await fs.writeFile(path.join(projectDir, 'README.md'), readmeContent, 'utf8');
+    
+    // 创建 .gitignore
+    const gitignoreContent = `# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Temporary files
+tmp/
+temp/
+`;
+    await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreContent, 'utf8');
+    
+    // 添加远程仓库
+    const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
+    await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: projectDir });
+    
+    // 提交初始文件
+    await execAsync('git add .', { cwd: projectDir });
+    await execAsync('git commit -m "Initial commit: 项目初始化"', { cwd: projectDir });
+    
+    // 推送到远程
+    try {
+      await execAsync(`git push -u origin ${project.git_branch}`, { 
+        cwd: projectDir,
+        timeout: 60000 
+      });
+      console.log(`项目已推送到远程仓库: ${project.git_url}`);
+    } catch (pushError) {
+      console.error('推送到远程失败:', pushError);
+      // 即使推送失败，本地项目已创建，继续返回结果
+    }
+    
+    // 获取当前 commit
+    const { stdout: commitSha } = await execAsync(
+      'git rev-parse HEAD',
+      { cwd: projectDir }
+    );
+    
+    return {
+      commitSha: commitSha.trim(),
+      commitsCount: 1,
+      changes: {
+        added: ['README.md', '.gitignore'],
+        modified: [],
+        deleted: []
+      },
+      isNewInit: true
+    };
   }
 
   /**
@@ -75,6 +287,8 @@ export class GitSyncService {
    */
   private async cloneProject(
     project: {
+      name: string;
+      description?: string;
       git_url: string;
       git_branch: string;
       git_token?: string;
