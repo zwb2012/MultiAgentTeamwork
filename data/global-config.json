@@ -5,13 +5,13 @@
     "default_model": "doubao-seed-1-8-251228"
   },
   "git": {
-    "user_name": "AI Agent",
-    "user_email": "agent@ai.local",
+    "user_name": "zwb2012",
+    "user_email": "zhuangwen46@163.com",
     "default_branch": "main"
   },
   "settings": {
     "auto_health_check": false,
     "health_check_interval": 30
   },
-  "updated_at": "2026-04-02T16:31:21.720Z"
+  "updated_at": "2026-04-02T16:33:16.093Z"
 }
