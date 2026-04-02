@@ -242,6 +242,20 @@ temp/
       await execAsync('git init', { cwd: projectDir });
     }
     
+    // 配置 git 用户信息（如果没有配置）
+    try {
+      await execAsync('git config user.name', { cwd: projectDir });
+    } catch {
+      // 没有配置用户名，设置默认值
+      await execAsync('git config user.name "AI Agent"', { cwd: projectDir });
+    }
+    try {
+      await execAsync('git config user.email', { cwd: projectDir });
+    } catch {
+      // 没有配置邮箱，设置默认值
+      await execAsync('git config user.email "agent@ai.local"', { cwd: projectDir });
+    }
+    
     // git add .
     await execAsync('git add .', { cwd: projectDir });
     
