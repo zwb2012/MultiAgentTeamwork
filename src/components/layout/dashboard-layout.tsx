@@ -23,7 +23,8 @@ import {
   FolderCog,
   FolderOpen,
   Server,
-  FileText
+  FileText,
+  Shield
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,6 +46,11 @@ const navItems: NavItem[] = [
     href: '#',
     icon: <Users className="h-5 w-5" />,
     children: [
+      {
+        title: '角色管理',
+        href: '/agent-roles',
+        icon: <Shield className="h-4 w-4" />
+      },
       {
         title: '智能体模板',
         href: '/agent-templates',

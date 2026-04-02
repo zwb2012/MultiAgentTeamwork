@@ -51,7 +51,6 @@ import {
   Activity
 } from 'lucide-react';
 import { 
-  AGENT_ROLE_TEMPLATES, 
   type Agent, 
   type AgentRole, 
   type AgentType,
@@ -60,6 +59,7 @@ import {
 } from '@/types/agent';
 import type { Project } from '@/types/project';
 import type { ModelConfig } from '@/types/model-config';
+import type { AgentRoleConfig } from '@/types/agent-role';
 
 export default function ProjectAgentsPage() {
   const router = useRouter();
@@ -70,6 +70,7 @@ export default function ProjectAgentsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [templates, setTemplates] = useState<Agent[]>([]);
   const [modelConfigs, setModelConfigs] = useState<ModelConfig[]>([]);
+  const [roleConfigs, setRoleConfigs] = useState<AgentRoleConfig[]>([]);
   const [loadingConfigs, setLoadingConfigs] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [filterProject, setFilterProject] = useState<string>('all');
@@ -115,6 +116,7 @@ export default function ProjectAgentsPage() {
     fetchAgents();
     fetchProjects();
     fetchTemplates();
+    fetchRoleConfigs();
     
     // 如果有模板ID参数，打开创建对话框
     if (templateId) {
@@ -129,6 +131,19 @@ export default function ProjectAgentsPage() {
       fetchModelConfigs();
     }
   }, [isCreateDialogOpen, formData.agent_type]);
+
+  const fetchRoleConfigs = async () => {
+    try {
+      const response = await fetch('/api/agent-roles');
+      const result = await response.json();
+      
+      if (result.success) {
+        setRoleConfigs(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取角色配置失败:', error);
+    }
+  };
 
   const fetchModelConfigs = async () => {
     try {
@@ -325,24 +340,26 @@ export default function ProjectAgentsPage() {
     setCreateFromTemplate(false);
   };
 
-  // 根据角色生成默认提示词
-  const generateDefaultPrompt = (role: AgentRole, agentName: string): string => {
-    const roleTemplate = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
-    if (roleTemplate) {
-      // 使用提供的名称，如果没有则使用角色名称
-      const nameToUse = agentName || roleTemplate.name;
-      return roleTemplate.system_prompt.replace(/{name}/g, nameToUse);
+  // 根据角色生成默认提示词（使用从API获取的角色配置）
+  const generateDefaultPrompt = (roleKey: string, agentName: string): string => {
+    const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    if (roleConfig) {
+      const nameToUse = agentName || roleConfig.name;
+      return roleConfig.system_prompt_template.replace(/{name}/g, nameToUse);
     }
-    return '';
+    // 如果没有找到角色配置，返回基本提示词
+    return `你是一个智能助手，名字叫${agentName || '助手'}。请根据具体任务提供专业的帮助。`;
   };
 
   // 处理角色变化
-  const handleRoleChange = (role: AgentRole) => {
-    const defaultPrompt = generateDefaultPrompt(role, formData.name);
+  const handleRoleChange = (roleKey: string) => {
+    const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    const defaultPrompt = generateDefaultPrompt(roleKey, formData.name);
     setFormData(prev => ({
       ...prev,
-      role,
-      system_prompt: defaultPrompt
+      role: roleKey as AgentRole,
+      system_prompt: defaultPrompt,
+      agent_type: (roleConfig?.suggested_agent_type as AgentType) || 'llm'
     }));
   };
 
@@ -353,12 +370,12 @@ export default function ProjectAgentsPage() {
     const isEmpty = !formData.system_prompt.trim();
     
     if (hasPlaceholder || isEmpty) {
-      const roleTemplate = AGENT_ROLE_TEMPLATES.find(t => t.role === formData.role);
+      const roleConfig = roleConfigs.find(r => r.role_key === formData.role);
       let newPrompt = formData.system_prompt;
       
-      if (roleTemplate && (isEmpty || hasPlaceholder)) {
+      if (roleConfig && (isEmpty || hasPlaceholder)) {
         // 重新生成提示词，使用新的名称
-        newPrompt = roleTemplate.system_prompt.replace(/{name}/g, name || roleTemplate.name);
+        newPrompt = roleConfig.system_prompt_template.replace(/{name}/g, name || roleConfig.name);
       }
       
       setFormData(prev => ({
@@ -552,9 +569,9 @@ export default function ProjectAgentsPage() {
     return <Badge className="bg-green-500"><Terminal className="h-3 w-3 mr-1" />进程</Badge>;
   };
 
-  const getRoleBadge = (role: string) => {
-    const template = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
-    return <Badge variant="outline">{template?.name || role}</Badge>;
+  const getRoleBadge = (roleKey: string) => {
+    const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    return <Badge variant="outline">{roleConfig?.name || roleKey}</Badge>;
   };
 
   const getProjectName = (projectId: string | null | undefined) => {
@@ -945,20 +962,29 @@ export default function ProjectAgentsPage() {
                 {/* 角色选择（仅在不使用模板时显示） */}
                 {!createFromTemplate && (
                   <div className="space-y-2">
-                    <Label>角色类型</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>角色类型</Label>
+                      <Link href="/agent-roles" target="_blank">
+                        <Button variant="ghost" size="sm" className="text-xs h-6">
+                          管理角色
+                        </Button>
+                      </Link>
+                    </div>
                     <Select
                       value={formData.role}
-                      onValueChange={(value) => handleRoleChange(value as AgentRole)}
+                      onValueChange={(value) => handleRoleChange(value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="选择角色类型" />
                       </SelectTrigger>
                       <SelectContent>
-                        {AGENT_ROLE_TEMPLATES.map(template => (
-                          <SelectItem key={template.role} value={template.role}>
+                        {roleConfigs.filter(r => r.is_active).map(role => (
+                          <SelectItem key={role.role_key} value={role.role_key}>
                             <div className="flex flex-col">
-                              <span>{template.name}</span>
-                              <span className="text-xs text-muted-foreground">{template.description}</span>
+                              <span>{role.name}</span>
+                              {role.description && (
+                                <span className="text-xs text-muted-foreground">{role.description}</span>
+                              )}
                             </div>
                           </SelectItem>
                         ))}

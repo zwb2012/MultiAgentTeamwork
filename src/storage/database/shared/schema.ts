@@ -512,3 +512,46 @@ export const project_sync_history = pgTable(
     index("project_sync_history_started_at_idx").on(table.started_at),
   ]
 );
+
+// ============================================
+// 角色配置表
+// ============================================
+
+export const agent_roles = pgTable(
+  "agent_roles",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    
+    // 角色标识（唯一）
+    role_key: varchar("role_key", { length: 64 }).notNull().unique(), // developer, frontend_dev, backend_dev, etc.
+    
+    // 基本信息
+    name: varchar("name", { length: 128 }).notNull(), // 显示名称：开发工程师
+    description: text("description"),
+    
+    // 默认提示词模板（{name} 会被替换为实际智能体名称）
+    system_prompt_template: text("system_prompt_template").notNull(),
+    
+    // 建议配置
+    suggested_agent_type: varchar("suggested_agent_type", { length: 20 }).default("llm"), // llm, process
+    suggested_model: varchar("suggested_model", { length: 64 }),
+    suggested_temperature: real("suggested_temperature"),
+    suggested_thinking: varchar("suggested_thinking", { length: 20 }),
+    suggested_caching: varchar("suggested_caching", { length: 20 }),
+    
+    // 能力标签
+    capability_tags: jsonb("capability_tags"), // string[]
+    
+    // 排序和状态
+    sort_order: integer("sort_order").default(0),
+    is_active: boolean("is_active").default(true).notNull(),
+    is_system: boolean("is_system").default(false).notNull(), // 系统预设角色不可删除
+    
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("agent_roles_role_key_idx").on(table.role_key),
+    index("agent_roles_is_active_idx").on(table.is_active),
+  ]
+);

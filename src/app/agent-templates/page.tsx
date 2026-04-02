@@ -40,7 +40,6 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { 
-  AGENT_ROLE_TEMPLATES, 
   type Agent, 
   type AgentRole, 
   type AgentType,
@@ -48,15 +47,17 @@ import {
   CAPABILITY_TAG_CONFIG
 } from '@/types/agent';
 import type { ModelConfig } from '@/types/model-config';
+import type { AgentRoleConfig } from '@/types/agent-role';
 
 export default function AgentTemplatesPage() {
   const router = useRouter();
   const [templates, setTemplates] = useState<Agent[]>([]);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<AgentRole>('developer');
+  const [selectedRole, setSelectedRole] = useState<string>('developer');
   
   // 大模型配置列表
   const [modelConfigs, setModelConfigs] = useState<ModelConfig[]>([]);
+  const [roleConfigs, setRoleConfigs] = useState<AgentRoleConfig[]>([]);
   const [loadingConfigs, setLoadingConfigs] = useState(false);
   
   // 表单数据
@@ -79,6 +80,7 @@ export default function AgentTemplatesPage() {
 
   useEffect(() => {
     fetchTemplates();
+    fetchRoleConfigs();
   }, []);
 
   useEffect(() => {
@@ -86,6 +88,19 @@ export default function AgentTemplatesPage() {
       fetchModelConfigs();
     }
   }, [isCreateDialogOpen, formData.agent_type]);
+
+  const fetchRoleConfigs = async () => {
+    try {
+      const response = await fetch('/api/agent-roles');
+      const result = await response.json();
+      
+      if (result.success) {
+        setRoleConfigs(result.data || []);
+      }
+    } catch (error) {
+      console.error('获取角色配置失败:', error);
+    }
+  };
 
   const fetchModelConfigs = async () => {
     try {
@@ -125,24 +140,24 @@ export default function AgentTemplatesPage() {
 
   // 打开创建对话框时自动选择第一个角色模板
   useEffect(() => {
-    if (isCreateDialogOpen) {
-      const template = AGENT_ROLE_TEMPLATES[0];
-      if (template && !formData.name) {
-        handleRoleSelect(template.role);
+    if (isCreateDialogOpen && roleConfigs.length > 0 && !formData.name) {
+      const firstRole = roleConfigs.find(r => r.is_active) || roleConfigs[0];
+      if (firstRole) {
+        handleRoleSelect(firstRole.role_key);
       }
     }
-  }, [isCreateDialogOpen]);
+  }, [isCreateDialogOpen, roleConfigs]);
 
-  const handleRoleSelect = (role: AgentRole) => {
-    setSelectedRole(role);
-    const template = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
-    if (template) {
+  const handleRoleSelect = (roleKey: string) => {
+    setSelectedRole(roleKey);
+    const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    if (roleConfig) {
       setFormData(prev => ({
         ...prev,
-        name: template.name,
-        role: template.role,
-        system_prompt: template.system_prompt,
-        agent_type: template.agent_type
+        name: roleConfig.name,
+        role: roleConfig.role_key as AgentRole,
+        system_prompt: roleConfig.system_prompt_template,
+        agent_type: (roleConfig.suggested_agent_type as AgentType) || 'llm'
       }));
     }
   };
@@ -252,9 +267,9 @@ export default function AgentTemplatesPage() {
     return <Badge className="bg-green-500"><Terminal className="h-3 w-3 mr-1" />进程</Badge>;
   };
 
-  const getRoleBadge = (role: string) => {
-    const template = AGENT_ROLE_TEMPLATES.find(t => t.role === role);
-    return <Badge variant="outline">{template?.name || role}</Badge>;
+  const getRoleBadge = (roleKey: string) => {
+    const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    return <Badge variant="outline">{roleConfig?.name || roleKey}</Badge>;
   };
 
   // 获取选中配置的信息
@@ -445,18 +460,25 @@ export default function AgentTemplatesPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>角色选择</Label>
+                  <div className="flex items-center justify-between">
+                    <Label>角色选择</Label>
+                    <Link href="/agent-roles" target="_blank">
+                      <Button variant="ghost" size="sm" className="text-xs h-6">
+                        管理角色
+                      </Button>
+                    </Link>
+                  </div>
                   <div className="grid grid-cols-4 gap-2">
-                    {AGENT_ROLE_TEMPLATES.map((t) => (
+                    {roleConfigs.filter(r => r.is_active).map((role) => (
                       <Button
-                        key={t.role}
+                        key={role.role_key}
                         type="button"
-                        variant={selectedRole === t.role ? 'default' : 'outline'}
+                        variant={selectedRole === role.role_key ? 'default' : 'outline'}
                         className="h-auto py-2 px-3"
-                        onClick={() => handleRoleSelect(t.role)}
+                        onClick={() => handleRoleSelect(role.role_key)}
                       >
                         <div className="text-center">
-                          <div className="text-sm">{t.name}</div>
+                          <div className="text-sm">{role.name}</div>
                         </div>
                       </Button>
                     ))}
