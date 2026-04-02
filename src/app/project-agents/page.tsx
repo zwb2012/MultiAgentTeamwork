@@ -200,11 +200,19 @@ export default function ProjectAgentsPage() {
       
       if (result.success && result.data) {
         const template = result.data;
+        // 生成实例名称（去掉可能的"(实例)"后缀，重新添加）
+        const instanceName = template.name.replace(/\s*\(实例\)$/, '').replace(/\s*\(模板\)$/, '');
+        const finalName = `${instanceName}`;
+        
+        // 替换系统提示词中的 {name} 变量为实际名称
+        let systemPrompt = template.system_prompt || '';
+        systemPrompt = systemPrompt.replace(/{name}/g, finalName);
+        
         setFormData(prev => ({
           ...prev,
-          name: template.name + ' (实例)',
+          name: finalName,
           role: template.role,
-          system_prompt: template.system_prompt,
+          system_prompt: systemPrompt,
           agent_type: template.agent_type,
           template_id: template.id,
           model_config_id: template.model_config_id || '',

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { Agent, Message, ModelConfig } from '@/types/agent';
+import { AGENT_ROLE_TEMPLATES } from '@/types/agent';
 import { injectProjectContext, buildProjectContextFromProject } from '@/lib/project-context';
 import { getAgentTasks, injectTaskContext } from '@/lib/agent-tasks';
 
@@ -92,6 +93,12 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // 获取智能体的角色名称（用于双重识别）
+    const getAgentRoleName = (agent: Agent): string | null => {
+      const roleTemplate = AGENT_ROLE_TEMPLATES.find(t => t.role === agent.role);
+      return roleTemplate?.name || null;
+    };
+
     // 智能识别目标智能体
     let targetAgent: any = null;
     
@@ -102,14 +109,19 @@ export async function POST(request: NextRequest) {
         targetAgent = found.agents;
       }
     } else if (auto_detect !== false) {
-      // 自动识别：优先检查消息中是否包含 @智能体名称 格式
+      // 自动识别：优先检查消息中是否包含 @智能体名称 或 @角色名称 格式
       const mentionMatch = user_message.match(/@([^\s@]+)/g);
       if (mentionMatch) {
         for (const match of mentionMatch) {
           const mentionName = match.slice(1).toLowerCase(); // 去掉@符号
           for (const p of participants) {
             const agent = p.agents as unknown as Agent;
-            if (agent.name && agent.name.toLowerCase() === mentionName) {
+            // 支持名字和角色名称双重识别
+            const agentName = agent.name?.toLowerCase();
+            const roleName = getAgentRoleName(agent)?.toLowerCase();
+            
+            if ((agentName && agentName === mentionName) || 
+                (roleName && roleName === mentionName)) {
               targetAgent = agent;
               break;
             }
@@ -118,13 +130,18 @@ export async function POST(request: NextRequest) {
         }
       }
       
-      // 如果没有通过@识别到，检查消息中是否包含智能体名字
+      // 如果没有通过@识别到，检查消息中是否包含智能体名字或角色名称
       if (!targetAgent) {
         const lowerMessage = user_message.toLowerCase();
         
         for (const p of participants) {
           const agent = p.agents as unknown as Agent;
-          if (agent.name && lowerMessage.includes(agent.name.toLowerCase())) {
+          const agentName = agent.name?.toLowerCase();
+          const roleName = getAgentRoleName(agent)?.toLowerCase();
+          
+          // 支持名字和角色名称双重识别
+          if ((agentName && lowerMessage.includes(agentName)) || 
+              (roleName && lowerMessage.includes(roleName))) {
             targetAgent = agent;
             break;
           }

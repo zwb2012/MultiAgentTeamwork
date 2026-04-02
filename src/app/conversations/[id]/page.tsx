@@ -399,10 +399,10 @@ export default function ConversationDetailPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* 左侧边栏 - 参与者列表 */}
-      <div className="w-64 border-r bg-muted/30 flex flex-col">
-        <div className="p-4 border-b">
+    <div className="flex h-screen bg-background overflow-hidden">
+      {/* 左侧边栏 - 参与者列表（固定，不滚动） */}
+      <div className="w-64 border-r bg-muted/30 flex flex-col flex-shrink-0">
+        <div className="p-4 border-b flex-shrink-0">
           <Link href="/conversations">
             <Button variant="ghost" size="sm">
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -411,7 +411,7 @@ export default function ConversationDetailPage() {
           </Link>
         </div>
         
-        <div className="p-4 border-b">
+        <div className="p-4 border-b flex-shrink-0">
           <h2 className="font-semibold truncate">{conversation?.title}</h2>
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline">{getTypeLabel(conversation?.type || 'private')}</Badge>
@@ -419,7 +419,8 @@ export default function ConversationDetailPage() {
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto p-4">
+        {/* 参与者列表区域 - 内部可滚动 */}
+        <div className="flex-1 overflow-y-auto p-4 min-h-0">
           <h3 className="text-sm font-medium text-muted-foreground mb-3 flex items-center gap-2">
             <Users className="h-4 w-4" />
             参与者
@@ -475,8 +476,8 @@ export default function ConversationDetailPage() {
         </div>
       </div>
 
-      {/* 右侧 - 消息区域 */}
-      <div className="flex-1 flex flex-col">
+      {/* 右侧 - 消息区域（可滚动） */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* 消息列表 */}
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
           {messages.length === 0 && !streamingMessage ? (

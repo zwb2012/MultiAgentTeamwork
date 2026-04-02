@@ -413,12 +413,40 @@ export class PipelineEngine {
       throw new Error(`智能体不存在: ${node.agent_id}`);
     }
     
-    // 发送开始消息
+    // 获取上游节点的输出数据
+    const upstreamOutputs = await this.getUpstreamOutputs(runId, node);
+    
+    // 构建输入数据
+    const inputData: Record<string, any> = {
+      node_name: node.name,
+      node_id: node.id,
+      upstream_outputs: upstreamOutputs,
+      started_at: new Date().toISOString()
+    };
+    
+    // 更新节点运行记录的输入数据
+    await this.client
+      .from('pipeline_node_runs')
+      .update({ input_data: inputData })
+      .eq('pipeline_run_id', runId)
+      .eq('node_id', node.id);
+    
+    // 发送开始消息（包含上游信息）
+    const upstreamSummary = Object.keys(upstreamOutputs).length > 0
+      ? `\n\n📋 上游节点输出:\n${Object.entries(upstreamOutputs)
+          .map(([nodeId, output]) => {
+            const outputNode = pipeline.nodes?.find(n => n.id === nodeId);
+            return `- ${outputNode?.name || nodeId}: ${(output as any)?.summary || '已完成'}`;
+          })
+          .join('\n')}`
+      : '';
+    
     await this.sendMessage(
       conversationId,
       agent.id,
       'task_start',
-      `🤖 ${agent.name} 开始执行任务: ${node.name}`
+      `🤖 ${agent.name} 开始执行任务: ${node.name}${upstreamSummary}`,
+      { node_id: node.id, upstream_outputs: upstreamOutputs }
     );
     
     // TODO: 实际调用智能体执行任务
@@ -426,13 +454,136 @@ export class PipelineEngine {
     // 目前模拟执行
     await new Promise(resolve => setTimeout(resolve, 2000));
     
+    // 构建输出数据
+    const outputData = {
+      agent_id: agent.id,
+      agent_name: agent.name,
+      status: 'completed',
+      summary: `任务 "${node.name}" 执行完成`,
+      timestamp: new Date().toISOString()
+    };
+    
+    // 更新节点运行记录的输出数据
+    await this.client
+      .from('pipeline_node_runs')
+      .update({ output_data: outputData })
+      .eq('pipeline_run_id', runId)
+      .eq('node_id', node.id);
+    
     // 发送完成消息
     await this.sendMessage(
       conversationId,
       agent.id,
       'task_complete',
-      `✅ ${agent.name} 完成任务: ${node.name}`
+      `✅ ${agent.name} 完成任务: ${node.name}`,
+      { node_id: node.id, output: outputData }
     );
+    
+    // 通知下游节点
+    await this.notifyDownstreamNodes(runId, node, pipeline, conversationId, outputData);
+  }
+  
+  /**
+   * 获取上游节点的输出数据
+   */
+  private async getUpstreamOutputs(
+    runId: string,
+    node: PipelineNode
+  ): Promise<Record<string, any>> {
+    const upstreamNodeIds = node.upstream_nodes as string[] || [];
+    
+    if (upstreamNodeIds.length === 0) {
+      return {};
+    }
+    
+    const { data: upstreamRuns } = await this.client
+      .from('pipeline_node_runs')
+      .select('node_id, output_data')
+      .eq('pipeline_run_id', runId)
+      .in('node_id', upstreamNodeIds);
+    
+    const outputs: Record<string, any> = {};
+    
+    for (const run of upstreamRuns || []) {
+      if (run.output_data) {
+        outputs[run.node_id] = run.output_data;
+      }
+    }
+    
+    return outputs;
+  }
+  
+  /**
+   * 通知下游节点
+   */
+  private async notifyDownstreamNodes(
+    runId: string,
+    completedNode: PipelineNode,
+    pipeline: Pipeline,
+    conversationId: string,
+    outputData: Record<string, any>
+  ): Promise<void> {
+    const nodes = pipeline.nodes || [];
+    
+    // 查找下游节点
+    const downstreamNodes = nodes.filter(n => {
+      const upstreamIds = n.upstream_nodes as string[] || [];
+      return upstreamIds.includes(completedNode.id);
+    });
+    
+    for (const downstream of downstreamNodes) {
+      if (downstream.agent_id) {
+        const { data: downstreamAgent } = await this.client
+          .from('agents')
+          .select('*')
+          .eq('id', downstream.agent_id)
+          .single();
+        
+        if (downstreamAgent) {
+          // 检查是否所有上游节点都已完成
+          const upstreamIds = downstream.upstream_nodes as string[] || [];
+          const { data: upstreamRuns } = await this.client
+            .from('pipeline_node_runs')
+            .select('node_id, status')
+            .eq('pipeline_run_id', runId)
+            .in('node_id', upstreamIds);
+          
+          const completedUpstreams = (upstreamRuns || [])
+            .filter(r => r.status === 'success')
+            .map(r => r.node_id);
+          
+          const allUpstreamCompleted = completedUpstreams.length === upstreamIds.length;
+          
+          if (allUpstreamCompleted) {
+            // 所有上游节点都已完成，发送准备通知
+            await this.sendMessage(
+              conversationId,
+              downstreamAgent.id,
+              'notification',
+              `📢 所有前置节点已完成，${downstreamAgent.name} 可以开始任务: ${downstream.name}`,
+              {
+                completed_node: completedNode.name,
+                completed_node_id: completedNode.id,
+                output: outputData
+              }
+            );
+          } else {
+            // 部分上游节点完成，发送进度通知
+            await this.sendMessage(
+              conversationId,
+              downstreamAgent.id,
+              'progress',
+              `⏳ ${completedNode.name} 已完成 (${completedUpstreams.length}/${upstreamIds.length} 个前置节点)`,
+              {
+                completed_node: completedNode.name,
+                completed_node_id: completedNode.id,
+                progress: `${completedUpstreams.length}/${upstreamIds.length}`
+              }
+            );
+          }
+        }
+      }
+    }
   }
   
   /**
