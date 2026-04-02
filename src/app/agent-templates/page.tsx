@@ -37,7 +37,8 @@ import {
   Server,
   ArrowRight,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  RefreshCw
 } from 'lucide-react';
 import { 
   type Agent, 
@@ -252,6 +253,39 @@ export default function AgentTemplatesPage() {
       }
     } catch (error) {
       console.error('删除模板失败:', error);
+    }
+  };
+
+  // 重置模板提示词（从角色配置获取原始模板）
+  const handleResetPrompt = async (template: Agent) => {
+    const roleConfig = roleConfigs.find(r => r.role_key === template.role);
+    if (!roleConfig) {
+      alert('找不到对应的角色配置');
+      return;
+    }
+    
+    if (!confirm(`确定要将模板"${template.name}"的提示词重置为角色"${roleConfig.name}"的默认模板吗？`)) return;
+    
+    try {
+      const response = await fetch(`/api/agents/${template.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_prompt: roleConfig.system_prompt_template
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        alert('提示词已重置，现在包含 {name} 占位符');
+        fetchTemplates();
+      } else {
+        alert('重置失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('重置提示词失败:', error);
+      alert('重置失败');
     }
   };
 
@@ -596,6 +630,13 @@ export default function AgentTemplatesPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* 检查提示词是否包含 {name} 占位符 */}
+                {!template.system_prompt?.includes('{name}') && (
+                  <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded text-xs text-yellow-700 dark:text-yellow-300">
+                    提示词已被固化，建议点击"重置"恢复 {`{name}`} 占位符
+                  </div>
+                )}
+                
                 <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
                   {template.system_prompt || '暂无描述'}
                 </p>
@@ -610,6 +651,16 @@ export default function AgentTemplatesPage() {
                     <Copy className="h-3 w-3 mr-1" />
                     创建实例
                   </Button>
+                  {!template.system_prompt?.includes('{name}') && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleResetPrompt(template)}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      重置
+                    </Button>
+                  )}
                   <Link href={`/agent-templates/${template.id}`} className="flex-1">
                     <Button variant="default" size="sm" className="w-full">
                       <Settings className="h-3 w-3 mr-1" />
