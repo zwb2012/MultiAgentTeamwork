@@ -468,21 +468,34 @@ export default function AgentTemplatesPage() {
                       </Button>
                     </Link>
                   </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {roleConfigs.filter(r => r.is_active).map((role) => (
-                      <Button
-                        key={role.role_key}
-                        type="button"
-                        variant={selectedRole === role.role_key ? 'default' : 'outline'}
-                        className="h-auto py-2 px-3"
-                        onClick={() => handleRoleSelect(role.role_key)}
-                      >
-                        <div className="text-center">
-                          <div className="text-sm">{role.name}</div>
-                        </div>
-                      </Button>
-                    ))}
-                  </div>
+                  {roleConfigs.length === 0 ? (
+                    <div className="p-4 border border-dashed rounded-lg text-center">
+                      <p className="text-sm text-muted-foreground mb-2">
+                        暂无角色配置
+                      </p>
+                      <Link href="/agent-roles" target="_blank">
+                        <Button variant="outline" size="sm">
+                          去初始化角色
+                        </Button>
+                      </Link>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-2">
+                      {roleConfigs.filter(r => r.is_active).map((role) => (
+                        <Button
+                          key={role.role_key}
+                          type="button"
+                          variant={selectedRole === role.role_key ? 'default' : 'outline'}
+                          className="h-auto py-2 px-3"
+                          onClick={() => handleRoleSelect(role.role_key)}
+                        >
+                          <div className="text-center">
+                            <div className="text-sm">{role.name}</div>
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

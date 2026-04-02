@@ -970,26 +970,39 @@ export default function ProjectAgentsPage() {
                         </Button>
                       </Link>
                     </div>
-                    <Select
-                      value={formData.role}
-                      onValueChange={(value) => handleRoleChange(value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="选择角色类型" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {roleConfigs.filter(r => r.is_active).map(role => (
-                          <SelectItem key={role.role_key} value={role.role_key}>
-                            <div className="flex flex-col">
-                              <span>{role.name}</span>
-                              {role.description && (
-                                <span className="text-xs text-muted-foreground">{role.description}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {roleConfigs.length === 0 ? (
+                      <div className="p-4 border border-dashed rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground mb-2">
+                          暂无角色配置
+                        </p>
+                        <Link href="/agent-roles" target="_blank">
+                          <Button variant="outline" size="sm">
+                            去初始化角色
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      <Select
+                        value={formData.role}
+                        onValueChange={(value) => handleRoleChange(value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="选择角色类型" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {roleConfigs.filter(r => r.is_active).map(role => (
+                            <SelectItem key={role.role_key} value={role.role_key}>
+                              <div className="flex flex-col">
+                                <span>{role.name}</span>
+                                {role.description && (
+                                  <span className="text-xs text-muted-foreground">{role.description}</span>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       选择角色后会自动填充对应的默认提示词
                     </p>
