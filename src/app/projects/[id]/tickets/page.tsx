@@ -161,8 +161,8 @@ export default function ProjectTicketsPage() {
       const [projectRes, ticketsRes, pipelinesRes, agentsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/tickets?project_id=${projectId}`),
-        fetch('/api/pipelines'),
-        fetch('/api/agents?is_template=false')
+        fetch(`/api/projects/${projectId}/pipelines`),
+        fetch(`/api/projects/${projectId}/agents`)
       ]);
       
       const projectData = await projectRes.json();
@@ -789,7 +789,7 @@ export default function ProjectTicketsPage() {
             {pipelines.length === 0 && (
               <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
                 <p>暂无可用的流水线</p>
-                <Link href="/pipelines/editor" className="text-primary text-sm hover:underline">
+                <Link href={`/projects/${projectId}/pipelines/editor/new`} className="text-primary text-sm hover:underline">
                   创建流水线
                 </Link>
               </div>

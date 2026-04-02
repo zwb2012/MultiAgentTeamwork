@@ -197,6 +197,12 @@ export default function EditProjectPage() {
               工单管理
             </Button>
           </Link>
+          <Link href={`/projects/${projectId}/pipelines`}>
+            <Button variant="outline">
+              <GitBranch className="h-4 w-4 mr-2" />
+              流水线
+            </Button>
+          </Link>
           <Button 
             variant="outline" 
             onClick={handleSync}

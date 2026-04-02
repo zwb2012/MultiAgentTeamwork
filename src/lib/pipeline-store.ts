@@ -158,6 +158,7 @@ export function getAllPipelines(): Pipeline[] {
         id: dir,
         name: data.name || dir,
         description: body.trim(),
+        project_id: data.project_id || undefined,
         trigger_type: data.trigger_type || 'manual',
         status: data.status || 'draft',
         run_status: data.run_status || 'idle',
@@ -194,6 +195,7 @@ export function getPipeline(id: string): Pipeline | null {
     id,
     name: data.name || id,
     description: body.trim(),
+    project_id: data.project_id || undefined,
     trigger_type: data.trigger_type || 'manual',
     status: data.status || 'draft',
     run_status: data.run_status || 'idle',
@@ -269,6 +271,7 @@ export function getPipelineNodes(pipelineId: string): any[] {
 export function createPipeline(data: {
   name: string;
   description?: string;
+  project_id?: string;
   trigger_type?: string;
   nodes?: PipelineNode[];
 }): Pipeline {
@@ -277,6 +280,7 @@ export function createPipeline(data: {
   
   const frontmatter = generateFrontmatter({
     name: data.name,
+    project_id: data.project_id || undefined,
     trigger_type: data.trigger_type || 'manual',
     status: 'draft',
     run_status: 'idle',
@@ -325,6 +329,7 @@ order_index: ${index}
 export function updatePipeline(id: string, data: {
   name?: string;
   description?: string;
+  project_id?: string;
   status?: PipelineDefinitionStatus;
   run_status?: PipelineRunStatus;
   nodes?: PipelineNode[];
@@ -338,6 +343,7 @@ export function updatePipeline(id: string, data: {
   
   const frontmatter = generateFrontmatter({
     name: data.name || existing.name,
+    project_id: data.project_id !== undefined ? data.project_id : existing.project_id,
     trigger_type: existing.trigger_type,
     status: data.status || existing.status,
     run_status: data.run_status || existing.run_status,
@@ -690,4 +696,12 @@ export function getPipelineRun(runId: string): PipelineRun | null {
     console.error('获取运行记录失败:', error);
     return null;
   }
+}
+
+/**
+ * 根据项目ID获取流水线列表
+ */
+export function getPipelinesByProject(projectId: string): Pipeline[] {
+  const allPipelines = getAllPipelines();
+  return allPipelines.filter(p => p.project_id === projectId);
 }

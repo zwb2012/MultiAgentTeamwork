@@ -86,8 +86,8 @@ const navItems: NavItem[] = [
     icon: <MessageSquare className="h-5 w-5" />
   },
   {
-    title: '流水线',
-    href: '/pipelines',
+    title: '流水线运行',
+    href: '/pipelines/run',
     icon: <GitPullRequest className="h-5 w-5" />
   },
   {

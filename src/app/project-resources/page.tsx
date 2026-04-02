@@ -372,8 +372,8 @@ export default function ProjectResourcesPage() {
         setShowCreatePipeline(false);
         setNewPipeline({ name: '', description: '' });
         fetchResources();
-        // 跳转到编辑页面
-        router.push(`/pipelines/${result.data.id}`);
+        // 跳转到项目流水线编辑页面
+        router.push(`/projects/${selectedProjectId}/pipelines/editor/${result.data.id}`);
       } else {
         alert('创建失败: ' + result.error);
       }
@@ -892,7 +892,7 @@ export default function ProjectResourcesPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem asChild>
-                            <Link href={`/pipelines/${pipeline.id}`}>
+                            <Link href={`/projects/${pipeline.project_id}/pipelines/editor/${pipeline.id}`}>
                               <Edit className="h-4 w-4 mr-2" />
                               编辑
                             </Link>
