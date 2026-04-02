@@ -186,33 +186,51 @@ export default function TicketDetailPage() {
       
       // 并行获取相关数据
       const promises: Promise<any>[] = [
-        fetch('/api/pipelines').then(r => r.json()),
-        fetch('/api/agents?is_template=false').then(r => r.json()),
         fetch(`/api/tickets/${ticketId}/runs`).then(r => r.json())
       ];
       
       if (ticketData.data.project_id) {
+        // 获取当前项目的智能体
+        promises.push(
+          fetch(`/api/agents?is_template=false&project_id=${ticketData.data.project_id}`).then(r => r.json())
+        );
+        // 获取当前项目的已发布流水线
+        promises.push(
+          fetch(`/api/pipelines?project_id=${ticketData.data.project_id}&type=pipelines`).then(r => r.json())
+        );
+        // 获取项目详情
         promises.push(
           fetch(`/api/projects/${ticketData.data.project_id}`).then(r => r.json())
         );
       }
       
-      const [pipelinesRes, agentsRes, runsRes, projectRes] = await Promise.all(promises);
+      const results = await Promise.all(promises);
       
-      if (pipelinesRes.success) {
-        setPipelines(pipelinesRes.data.filter((p: Pipeline) => p.status === 'published'));
+      // 运行记录
+      if (results[0].success) {
+        setPipelineRuns(results[0].data);
       }
       
-      if (agentsRes.success) {
-        setAgents(agentsRes.data);
-      }
-      
-      if (runsRes.success) {
-        setPipelineRuns(runsRes.data);
-      }
-      
-      if (projectRes?.success) {
-        setProject(projectRes.data);
+      // 智能体和流水线（仅在有关联项目时）
+      if (ticketData.data.project_id) {
+        // 智能体
+        if (results[1]?.success) {
+          setAgents(results[1].data);
+        }
+        
+        // 流水线 - 只显示已发布的
+        if (results[2]?.success) {
+          setPipelines(results[2].data.filter((p: Pipeline) => p.status === 'published'));
+        }
+        
+        // 项目信息
+        if (results[3]?.success) {
+          setProject(results[3].data);
+        }
+      } else {
+        // 没有关联项目时，清空智能体和流水线列表
+        setAgents([]);
+        setPipelines([]);
       }
     } catch (error) {
       console.error('获取数据失败:', error);

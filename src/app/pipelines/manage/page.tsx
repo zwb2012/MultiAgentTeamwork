@@ -75,7 +75,7 @@ export default function PipelineManagePage() {
   const fetchPipelines = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/pipelines');
+      const response = await fetch('/api/pipelines?type=pipelines');
       const result = await response.json();
       
       if (result.success) {
@@ -180,8 +180,8 @@ export default function PipelineManagePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">流水线管理</h1>
-          <p className="text-muted-foreground">管理和执行多智能体协作流水线</p>
+          <h1 className="text-2xl font-bold">流水线编排</h1>
+          <p className="text-muted-foreground">设计和编排多智能体协作流水线</p>
         </div>
       </div>
 

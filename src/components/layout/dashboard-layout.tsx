@@ -92,12 +92,12 @@ const navItems: NavItem[] = [
     icon: <GitPullRequest className="h-5 w-5" />,
     children: [
       {
-        title: '管理',
+        title: '编排',
         href: '/pipelines/manage',
         icon: <Workflow className="h-4 w-4" />
       },
       {
-        title: '运行状态监控',
+        title: '监控',
         href: '/pipelines/run',
         icon: <Activity className="h-4 w-4" />
       }
