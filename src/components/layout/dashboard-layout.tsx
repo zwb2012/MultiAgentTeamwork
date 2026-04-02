@@ -9,7 +9,6 @@ import {
   LayoutDashboard,
   Users,
   FileCode,
-  GitBranch,
   MessageSquare,
   GitPullRequest,
   Ticket,
@@ -24,7 +23,9 @@ import {
   FolderOpen,
   Server,
   FileText,
-  Shield
+  Shield,
+  Workflow,
+  Activity
 } from 'lucide-react';
 
 interface NavItem {
@@ -86,9 +87,21 @@ const navItems: NavItem[] = [
     icon: <MessageSquare className="h-5 w-5" />
   },
   {
-    title: '流水线运行',
-    href: '/pipelines/run',
-    icon: <GitPullRequest className="h-5 w-5" />
+    title: '流水线',
+    href: '#',
+    icon: <GitPullRequest className="h-5 w-5" />,
+    children: [
+      {
+        title: '管理',
+        href: '/pipelines/manage',
+        icon: <Workflow className="h-4 w-4" />
+      },
+      {
+        title: '运行状态监控',
+        href: '/pipelines/run',
+        icon: <Activity className="h-4 w-4" />
+      }
+    ]
   },
   {
     title: '工单管理',
@@ -126,7 +139,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '系统设置']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['智能体管理', '项目管理', '流水线', '系统设置']);
   const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const toggleExpand = (title: string) => {
