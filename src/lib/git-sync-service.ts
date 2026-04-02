@@ -8,6 +8,7 @@ import { promisify } from 'util';
 import fs from 'fs/promises';
 import path from 'path';
 import { decrypt } from './encryption';
+import { getGitUserConfig, getEffectiveGitToken } from './global-config';
 
 const execAsync = promisify(exec);
 
@@ -242,18 +243,21 @@ temp/
       await execAsync('git init', { cwd: projectDir });
     }
     
+    // 获取全局 Git 用户配置
+    const gitUserConfig = getGitUserConfig();
+    
     // 配置 git 用户信息（如果没有配置）
     try {
       await execAsync('git config user.name', { cwd: projectDir });
     } catch {
-      // 没有配置用户名，设置默认值
-      await execAsync('git config user.name "AI Agent"', { cwd: projectDir });
+      // 没有配置用户名，使用全局配置
+      await execAsync(`git config user.name "${gitUserConfig.user_name}"`, { cwd: projectDir });
     }
     try {
       await execAsync('git config user.email', { cwd: projectDir });
     } catch {
-      // 没有配置邮箱，设置默认值
-      await execAsync('git config user.email "agent@ai.local"', { cwd: projectDir });
+      // 没有配置邮箱，使用全局配置
+      await execAsync(`git config user.email "${gitUserConfig.user_email}"`, { cwd: projectDir });
     }
     
     // git add .
@@ -581,11 +585,15 @@ temp/
 
   /**
    * 构建带认证的 Git URL
+   * 优先使用项目 Token，否则使用全局 Token
    */
   private async buildAuthenticatedUrl(
     gitUrl: string,
-    encryptedToken?: string
+    encryptedProjectToken?: string
   ): Promise<string> {
+    // 获取有效的 Token（优先项目配置，否则使用全局配置）
+    const encryptedToken = getEffectiveGitToken(encryptedProjectToken);
+    
     if (!encryptedToken) {
       return gitUrl;
     }

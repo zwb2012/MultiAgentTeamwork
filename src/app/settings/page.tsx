@@ -10,18 +10,39 @@ import {
   Settings as SettingsIcon, 
   Save,
   Loader2,
-  Activity
+  Activity,
+  GitBranch,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
+interface GitConfig {
+  user_name: string;
+  user_email: string;
+  default_branch: string;
+  token?: string;
+}
+
+interface SettingsConfig {
+  auto_health_check: boolean;
+  health_check_interval: number;
+}
+
 export default function SettingsPage() {
-  const [config, setConfig] = useState({
-    settings: {
-      auto_health_check: true,
-      health_check_interval: 30
-    }
+  const [gitConfig, setGitConfig] = useState<GitConfig>({
+    user_name: 'AI Agent',
+    user_email: 'agent@ai.local',
+    default_branch: 'main',
+    token: ''
+  });
+  
+  const [settings, setSettings] = useState<SettingsConfig>({
+    auto_health_check: true,
+    health_check_interval: 30
   });
   
   const [isSaving, setIsSaving] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     fetchConfig();
@@ -32,8 +53,18 @@ export default function SettingsPage() {
       const response = await fetch('/api/config');
       const result = await response.json();
       
-      if (result.success && result.data.settings) {
-        setConfig({ settings: result.data.settings });
+      if (result.success) {
+        if (result.data.git) {
+          setGitConfig({
+            user_name: result.data.git.user_name || 'AI Agent',
+            user_email: result.data.git.user_email || 'agent@ai.local',
+            default_branch: result.data.git.default_branch || 'main',
+            token: '' // 不显示已保存的token
+          });
+        }
+        if (result.data.settings) {
+          setSettings(result.data.settings);
+        }
       }
     } catch (error) {
       console.error('获取配置失败:', error);
@@ -47,7 +78,10 @@ export default function SettingsPage() {
       const response = await fetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({
+          git: gitConfig,
+          settings: settings
+        })
       });
       
       const result = await response.json();
@@ -86,6 +120,88 @@ export default function SettingsPage() {
         </Button>
       </div>
 
+      {/* Git 配置 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <GitBranch className="h-5 w-5" />
+            Git 配置
+          </CardTitle>
+          <CardDescription>
+            配置项目同步时的 Git 用户信息，未配置独立 Token 的项目将使用全局 Token
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="git_user_name">用户名</Label>
+              <Input
+                id="git_user_name"
+                value={gitConfig.user_name}
+                onChange={(e) => setGitConfig({ ...gitConfig, user_name: e.target.value })}
+                placeholder="Git 提交者名称"
+              />
+              <p className="text-xs text-muted-foreground">
+                Git 提交时显示的提交者名称
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="git_user_email">邮箱</Label>
+              <Input
+                id="git_user_email"
+                type="email"
+                value={gitConfig.user_email}
+                onChange={(e) => setGitConfig({ ...gitConfig, user_email: e.target.value })}
+                placeholder="Git 提交者邮箱"
+              />
+              <p className="text-xs text-muted-foreground">
+                Git 提交时显示的提交者邮箱
+              </p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="git_default_branch">默认分支</Label>
+              <Input
+                id="git_default_branch"
+                value={gitConfig.default_branch}
+                onChange={(e) => setGitConfig({ ...gitConfig, default_branch: e.target.value })}
+                placeholder="main"
+              />
+              <p className="text-xs text-muted-foreground">
+                新建仓库时的默认分支名称
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="git_token">全局 Token</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="git_token"
+                  type={showToken ? 'text' : 'password'}
+                  value={gitConfig.token}
+                  onChange={(e) => setGitConfig({ ...gitConfig, token: e.target.value })}
+                  placeholder="留空则不修改"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowToken(!showToken)}
+                >
+                  {showToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                用于访问私有仓库，项目未配置 Token 时使用此值
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* 健康检查设置 */}
       <Card>
         <CardHeader>
@@ -106,10 +222,10 @@ export default function SettingsPage() {
               </p>
             </div>
             <Switch
-              checked={config.settings.auto_health_check}
-              onCheckedChange={(checked) => setConfig({
-                ...config,
-                settings: { ...config.settings, auto_health_check: checked }
+              checked={settings.auto_health_check}
+              onCheckedChange={(checked) => setSettings({
+                ...settings,
+                auto_health_check: checked
               })}
             />
           </div>
@@ -120,13 +236,10 @@ export default function SettingsPage() {
               type="number"
               min={0}
               max={1440}
-              value={config.settings.health_check_interval}
-              onChange={(e) => setConfig({
-                ...config,
-                settings: { 
-                  ...config.settings, 
-                  health_check_interval: parseInt(e.target.value) || 30 
-                }
+              value={settings.health_check_interval}
+              onChange={(e) => setSettings({
+                ...settings, 
+                health_check_interval: parseInt(e.target.value) || 30 
               })}
             />
             <p className="text-xs text-muted-foreground">

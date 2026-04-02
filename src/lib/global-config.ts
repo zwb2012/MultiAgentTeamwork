@@ -19,6 +19,14 @@ export interface GlobalConfig {
     default_model: string;
   };
   
+  // Git 配置
+  git: {
+    user_name: string;        // Git 用户名
+    user_email: string;       // Git 邮箱
+    default_branch: string;   // 默认分支
+    token?: string;           // 全局 Git Token（加密存储）
+  };
+  
   // 其他配置
   settings: {
     auto_health_check: boolean;  // 创建智能体后自动检测
@@ -35,6 +43,12 @@ const DEFAULT_CONFIG: GlobalConfig = {
     default_api_key: '',
     default_base_url: 'https://api.coze.cn',
     default_model: 'doubao-seed-1-8-251228'
+  },
+  git: {
+    user_name: 'AI Agent',
+    user_email: 'agent@ai.local',
+    default_branch: 'main',
+    token: undefined
   },
   settings: {
     auto_health_check: true,
@@ -79,6 +93,11 @@ export function saveGlobalConfig(config: Partial<GlobalConfig>): GlobalConfig {
     newConfig.llm = { ...currentConfig.llm, ...config.llm };
   }
   
+  // 保存 Git 配置
+  if (config.git) {
+    newConfig.git = { ...currentConfig.git, ...config.git };
+  }
+  
   // 保存设置
   if (config.settings) {
     newConfig.settings = { ...currentConfig.settings, ...config.settings };
@@ -118,4 +137,32 @@ export function getEffectiveAPIConfig(agentConfig?: {
 export function hasGlobalAPIKey(): boolean {
   const config = getGlobalConfig();
   return !!config.llm.default_api_key;
+}
+
+/**
+ * 获取有效的 Git Token
+ * 优先使用项目自己的配置，否则使用全局配置
+ */
+export function getEffectiveGitToken(projectToken?: string): string | undefined {
+  if (projectToken) {
+    return projectToken;
+  }
+  const globalConfig = getGlobalConfig();
+  return globalConfig.git.token;
+}
+
+/**
+ * 获取 Git 用户配置
+ */
+export function getGitUserConfig(): {
+  user_name: string;
+  user_email: string;
+  default_branch: string;
+} {
+  const globalConfig = getGlobalConfig();
+  return {
+    user_name: globalConfig.git.user_name,
+    user_email: globalConfig.git.user_email,
+    default_branch: globalConfig.git.default_branch
+  };
 }

@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getGlobalConfig, saveGlobalConfig } from '@/lib/global-config';
+import { encrypt, decrypt } from '@/lib/encryption';
 
 // GET /api/config - 获取全局配置
 export async function GET() {
   try {
     const config = getGlobalConfig();
     
-    // 隐藏敏感信息（API Key只显示前后几位）
+    // 隐藏敏感信息
     const safeConfig = {
       ...config,
       llm: {
@@ -14,6 +15,10 @@ export async function GET() {
         default_api_key: config.llm.default_api_key 
           ? `${config.llm.default_api_key.substring(0, 8)}...${config.llm.default_api_key.substring(config.llm.default_api_key.length - 4)}`
           : ''
+      },
+      git: {
+        ...config.git,
+        token: config.git.token ? '••••••••••••' : undefined
       }
     };
     
@@ -34,12 +39,29 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { llm, settings } = body;
+    const { llm, git, settings } = body;
     
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     
     if (llm) {
       updateData.llm = llm;
+    }
+    
+    if (git) {
+      // 如果传入了新的 token，加密存储
+      if (git.token && git.token !== '••••••••••••' && !git.token.startsWith('•')) {
+        updateData.git = {
+          ...git,
+          token: await encrypt(git.token)
+        };
+      } else {
+        // 不更新 token
+        const currentConfig = getGlobalConfig();
+        updateData.git = {
+          ...git,
+          token: currentConfig.git.token
+        };
+      }
     }
     
     if (settings) {
@@ -56,6 +78,10 @@ export async function PUT(request: NextRequest) {
         default_api_key: newConfig.llm.default_api_key 
           ? `${newConfig.llm.default_api_key.substring(0, 8)}...${newConfig.llm.default_api_key.substring(newConfig.llm.default_api_key.length - 4)}`
           : ''
+      },
+      git: {
+        ...newConfig.git,
+        token: newConfig.git.token ? '••••••••••••' : undefined
       }
     };
     
