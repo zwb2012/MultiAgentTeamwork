@@ -41,7 +41,9 @@ import {
   User,
   Bot,
   History,
-  ExternalLink
+  ExternalLink,
+  Zap,
+  RefreshCw
 } from 'lucide-react';
 import type { Pipeline, TicketType, PipelineRunStatus } from '@/types/pipeline';
 import type { TicketPriority } from '@/types/agent';
@@ -71,6 +73,15 @@ const STATUS_CONFIG = {
   closed: { label: '已关闭', color: 'bg-gray-100 text-gray-500' }
 };
 
+// 运行状态配置
+const RUN_STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
+  pending: { label: '等待执行', color: 'text-yellow-600', icon: Clock },
+  running: { label: '执行中', color: 'text-blue-600', icon: Loader2 },
+  success: { label: '执行成功', color: 'text-green-600', icon: CheckCircle },
+  failed: { label: '执行失败', color: 'text-red-600', icon: XCircle },
+  cancelled: { label: '已取消', color: 'text-gray-600', icon: XCircle }
+};
+
 interface TicketDetail {
   id: string;
   title: string;
@@ -94,6 +105,25 @@ interface Agent {
   role?: string;
 }
 
+interface PipelineRunRecord {
+  id: string;
+  pipeline_id: string;
+  pipeline_name?: string;
+  status: string;
+  total_nodes: number;
+  completed_nodes: number;
+  failed_nodes: number;
+  started_at?: string;
+  completed_at?: string;
+  created_at: string;
+  agent_tasks?: Array<{
+    id: string;
+    agent_id: string;
+    title: string;
+    status: string;
+  }>;
+}
+
 export default function TicketDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -103,6 +133,7 @@ export default function TicketDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [pipelineRuns, setPipelineRuns] = useState<PipelineRunRecord[]>([]);
   const [loading, setLoading] = useState(true);
   
   // 流转对话框
@@ -115,17 +146,21 @@ export default function TicketDetailPage() {
     pipeline_id: '',
     comment: ''
   });
-  
-  // 执行结果
-  const [executionResult, setExecutionResult] = useState<{
-    type: 'pipeline' | 'conversation' | null;
-    id: string | null;
-    status: string | null;
-  }>({ type: null, id: null, status: null });
 
   useEffect(() => {
     fetchData();
   }, [ticketId]);
+
+  // 自动刷新（有运行中的流水线时）
+  useEffect(() => {
+    const hasRunning = pipelineRuns.some(r => r.status === 'running');
+    if (hasRunning) {
+      const interval = setInterval(() => {
+        fetchPipelineRuns();
+      }, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [pipelineRuns]);
 
   const fetchData = async () => {
     try {
@@ -152,7 +187,8 @@ export default function TicketDetailPage() {
       // 并行获取相关数据
       const promises: Promise<any>[] = [
         fetch('/api/pipelines').then(r => r.json()),
-        fetch('/api/agents?is_template=false').then(r => r.json())
+        fetch('/api/agents?is_template=false').then(r => r.json()),
+        fetch(`/api/tickets/${ticketId}/runs`).then(r => r.json())
       ];
       
       if (ticketData.data.project_id) {
@@ -161,7 +197,7 @@ export default function TicketDetailPage() {
         );
       }
       
-      const [pipelinesRes, agentsRes, projectRes] = await Promise.all(promises);
+      const [pipelinesRes, agentsRes, runsRes, projectRes] = await Promise.all(promises);
       
       if (pipelinesRes.success) {
         setPipelines(pipelinesRes.data.filter((p: Pipeline) => p.status === 'published'));
@@ -171,6 +207,10 @@ export default function TicketDetailPage() {
         setAgents(agentsRes.data);
       }
       
+      if (runsRes.success) {
+        setPipelineRuns(runsRes.data);
+      }
+      
       if (projectRes?.success) {
         setProject(projectRes.data);
       }
@@ -178,6 +218,19 @@ export default function TicketDetailPage() {
       console.error('获取数据失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPipelineRuns = async () => {
+    try {
+      const response = await fetch(`/api/tickets/${ticketId}/runs`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setPipelineRuns(result.data);
+      }
+    } catch (error) {
+      console.error('获取运行记录失败:', error);
     }
   };
 
@@ -213,19 +266,19 @@ export default function TicketDetailPage() {
         const result = await response.json();
         
         if (result.success) {
-          setExecutionResult({
-            type: 'pipeline',
-            id: result.data?.run_id,
-            status: 'running'
-          });
           setFlowDialogOpen(false);
-          fetchData();
-          alert('流水线已开始执行');
+          fetchPipelineRuns();
+          // 跳转到运行详情页
+          if (result.data?.id) {
+            router.push(`/pipelines/run/${result.data.id}`);
+          } else {
+            alert('流水线已开始执行');
+          }
         } else {
           alert('执行失败: ' + result.error);
         }
       } else {
-        // 普通流转（状态/负责人）
+        // 普通流转
         const response = await fetch(`/api/tickets/${ticketId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -262,6 +315,25 @@ export default function TicketDetailPage() {
     return <Icon className={`h-5 w-5 ${config.color}`} />;
   };
 
+  // 格式化时间
+  const formatTime = (time?: string) => {
+    if (!time) return '-';
+    return new Date(time).toLocaleString('zh-CN');
+  };
+
+  // 计算执行时长
+  const getDuration = (run: PipelineRunRecord) => {
+    if (!run.started_at) return '-';
+    
+    const start = new Date(run.started_at);
+    const end = run.completed_at ? new Date(run.completed_at) : new Date();
+    const duration = Math.floor((end.getTime() - start.getTime()) / 1000);
+    
+    if (duration < 60) return `${duration}秒`;
+    if (duration < 3600) return `${Math.floor(duration / 60)}分${duration % 60}秒`;
+    return `${Math.floor(duration / 3600)}小时${Math.floor((duration % 3600) / 60)}分`;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -287,7 +359,7 @@ export default function TicketDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted">
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" asChild>
@@ -307,6 +379,10 @@ export default function TicketDetailPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={fetchData}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              刷新
+            </Button>
             <Button variant="outline" onClick={() => openFlowDialog('status')}>
               更新状态
             </Button>
@@ -382,48 +458,88 @@ export default function TicketDetailPage() {
               </CardContent>
             </Card>
 
-            {/* 执行状态 */}
-            {ticket.pipeline_run_id && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <GitBranch className="h-5 w-5" />
-                    执行状态
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      {ticket.pipeline_run_status === 'running' ? (
-                        <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
-                      ) : ticket.pipeline_run_status === 'success' ? (
-                        <CheckCircle className="h-8 w-8 text-green-500" />
-                      ) : ticket.pipeline_run_status === 'failed' ? (
-                        <XCircle className="h-8 w-8 text-red-500" />
-                      ) : (
-                        <Clock className="h-8 w-8 text-yellow-500" />
-                      )}
-                      <div>
-                        <p className="font-medium">
-                          {ticket.pipeline_run_status === 'running' ? '执行中' :
-                           ticket.pipeline_run_status === 'success' ? '执行成功' :
-                           ticket.pipeline_run_status === 'failed' ? '执行失败' : '等待执行'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          流水线运行ID: {ticket.pipeline_run_id}
-                        </p>
-                      </div>
-                    </div>
-                    <Link href={`/pipelines/run/${ticket.pipeline_run_id}`}>
-                      <Button variant="outline" size="sm">
-                        查看详情
-                        <ExternalLink className="h-4 w-4 ml-2" />
-                      </Button>
-                    </Link>
+            {/* 执行记录 */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  执行记录
+                </CardTitle>
+                <CardDescription>
+                  流水线执行历史和智能体工作状态
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {pipelineRuns.length === 0 ? (
+                  <div className="text-center py-8">
+                    <GitBranch className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground">暂无执行记录</p>
+                    <Button 
+                      className="mt-4" 
+                      onClick={() => openFlowDialog('pipeline')}
+                      disabled={pipelines.length === 0}
+                    >
+                      <Play className="h-4 w-4 mr-2" />
+                      执行流水线
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <div className="space-y-4">
+                    {pipelineRuns.map(run => {
+                      const statusConfig = RUN_STATUS_CONFIG[run.status] || RUN_STATUS_CONFIG.pending;
+                      const StatusIcon = statusConfig.icon;
+                      
+                      return (
+                        <Card key={run.id} className="overflow-hidden">
+                          <div className="flex items-stretch">
+                            <div className={`w-1 ${run.status === 'success' ? 'bg-green-500' : run.status === 'failed' ? 'bg-red-500' : run.status === 'running' ? 'bg-blue-500' : 'bg-yellow-500'}`} />
+                            <CardContent className="flex-1 py-4">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <StatusIcon className={`h-5 w-5 ${statusConfig.color} ${run.status === 'running' ? 'animate-spin' : ''}`} />
+                                    <span className="font-medium">{run.pipeline_name || '流水线'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                                    <span>
+                                      {run.completed_nodes}/{run.total_nodes} 节点
+                                    </span>
+                                    <span>耗时: {getDuration(run)}</span>
+                                    <span>{formatTime(run.created_at)}</span>
+                                  </div>
+                                  
+                                  {/* 智能体任务状态 */}
+                                  {run.agent_tasks && run.agent_tasks.length > 0 && (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {run.agent_tasks.map(task => (
+                                        <Badge key={task.id} variant="outline" className="text-xs">
+                                          <Bot className="h-3 w-3 mr-1" />
+                                          {task.title}
+                                          <span className="ml-1 text-muted-foreground">
+                                            ({task.status})
+                                          </span>
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                <Link href={`/pipelines/run/${run.id}`}>
+                                  <Button variant="outline" size="sm">
+                                    查看详情
+                                    <ExternalLink className="h-4 w-4 ml-2" />
+                                  </Button>
+                                </Link>
+                              </div>
+                            </CardContent>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* 右侧：操作面板 */}
