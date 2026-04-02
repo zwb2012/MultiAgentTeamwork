@@ -162,7 +162,10 @@ export async function POST(request: NextRequest) {
     }
     
     // 替换系统提示词中的{name}占位符
-    finalSystemPrompt = finalSystemPrompt.replace(/{name}/g, finalName);
+    // 注意：模板不替换，保留{name}占位符，实例创建时再替换
+    if (!is_template) {
+      finalSystemPrompt = finalSystemPrompt.replace(/{name}/g, finalName);
+    }
     
     const client = getSupabaseClient();
     

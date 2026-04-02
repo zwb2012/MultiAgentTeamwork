@@ -78,6 +78,9 @@ export default function ProjectAgentsPage() {
   // 是否从模板创建
   const [createFromTemplate, setCreateFromTemplate] = useState(false);
   
+  // 模板原始提示词（用于名称变化时重新替换）
+  const [templatePrompt, setTemplatePrompt] = useState<string>('');
+  
   // 表单数据
   const [formData, setFormData] = useState<{
     name: string;
@@ -219,9 +222,12 @@ export default function ProjectAgentsPage() {
         const instanceName = template.name.replace(/\s*\(实例\)$/, '').replace(/\s*\(模板\)$/, '');
         const finalName = `${instanceName}`;
         
+        // 存储模板原始提示词（包含 {name} 占位符）
+        const originalPrompt = template.system_prompt || '';
+        setTemplatePrompt(originalPrompt);
+        
         // 替换系统提示词中的 {name} 变量为实际名称
-        let systemPrompt = template.system_prompt || '';
-        systemPrompt = systemPrompt.replace(/{name}/g, finalName);
+        const systemPrompt = originalPrompt.replace(/{name}/g, finalName);
         
         setFormData(prev => ({
           ...prev,
@@ -338,6 +344,7 @@ export default function ProjectAgentsPage() {
       capability_tags: []
     });
     setCreateFromTemplate(false);
+    setTemplatePrompt(''); // 清空模板原始提示词
   };
 
   // 根据角色生成默认提示词（使用从API获取的角色配置）
@@ -369,6 +376,18 @@ export default function ProjectAgentsPage() {
 
   // 处理名称变化（同步更新提示词中的{name}）
   const handleNameChange = (name: string) => {
+    // 如果是从模板创建，使用模板的原始提示词
+    if (createFromTemplate && templatePrompt) {
+      const newPrompt = templatePrompt.replace(/{name}/g, name || '{name}');
+      setFormData(prev => ({
+        ...prev,
+        name,
+        system_prompt: newPrompt
+      }));
+      return;
+    }
+    
+    // 否则使用角色配置的提示词模板
     const roleConfig = roleConfigs.find(r => r.role_key === formData.role);
     
     if (roleConfig) {
