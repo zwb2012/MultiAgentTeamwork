@@ -477,9 +477,9 @@ export default function ConversationDetailPage() {
       </div>
 
       {/* 右侧 - 消息区域（可滚动） */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
         {/* 消息列表 */}
-        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+        <div className="flex-1 overflow-y-auto p-4 min-h-0" ref={scrollRef}>
           {messages.length === 0 && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <MessageSquare className="h-12 w-12 mb-4" />
@@ -545,7 +545,7 @@ export default function ConversationDetailPage() {
               <div ref={messagesEndRef} />
             </div>
           )}
-        </ScrollArea>
+        </div>
 
         {/* 输入区域 */}
         <div className="border-t p-4">
