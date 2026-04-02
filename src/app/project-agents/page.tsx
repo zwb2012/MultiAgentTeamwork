@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -61,7 +61,7 @@ import type { Project } from '@/types/project';
 import type { ModelConfig } from '@/types/model-config';
 import type { AgentRoleConfig } from '@/types/agent-role';
 
-export default function ProjectAgentsPage() {
+function ProjectAgentsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = searchParams.get('template_id');
@@ -1230,5 +1230,13 @@ export default function ProjectAgentsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ProjectAgentsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="text-muted-foreground">加载中...</div></div>}>
+      <ProjectAgentsContent />
+    </Suspense>
   );
 }

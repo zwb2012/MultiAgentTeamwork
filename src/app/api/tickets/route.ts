@@ -1,24 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getAllTickets,
-  createTicket,
-  getTicketStats
-} from '@/lib/ticket-store';
+  createTicket
+} from '@/lib/ticket-db-store';
 import type { TicketType, TicketPriority } from '@/types/agent';
 
 // GET /api/tickets - 获取工单列表
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const stats = searchParams.get('stats');
     const projectId = searchParams.get('project_id');
     
-    if (stats === 'true') {
-      const ticketStats = getTicketStats();
-      return NextResponse.json({ success: true, data: ticketStats });
-    }
-    
-    const tickets = getAllTickets(projectId || undefined);
+    const tickets = await getAllTickets(projectId || undefined);
     
     return NextResponse.json({ 
       success: true, 
@@ -54,7 +47,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const ticket = createTicket({
+    const ticket = await createTicket({
       type: type as TicketType || 'bug',
       title,
       description: description || '',

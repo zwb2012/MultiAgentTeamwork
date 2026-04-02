@@ -3,7 +3,7 @@ import {
   getTicket,
   updateTicket,
   deleteTicket
-} from '@/lib/ticket-store';
+} from '@/lib/ticket-db-store';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import type { TicketStatus } from '@/types/agent';
 
@@ -14,7 +14,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const ticket = getTicket(id);
+    const ticket = await getTicket(id);
     
     if (!ticket) {
       return NextResponse.json(
@@ -43,16 +43,14 @@ export async function PUT(
     const body = await request.json();
     
     // 获取原工单信息
-    const oldTicket = getTicket(id);
+    const oldTicket = await getTicket(id);
     
-    const ticket = updateTicket(id, {
+    const ticket = await updateTicket(id, {
       title: body.title,
       description: body.description,
       priority: body.priority,
       assignee_id: body.assignee_id,
-      assignee_name: body.assignee_name,
-      status: body.status as TicketStatus,
-      comment: body.comment
+      status: body.status as TicketStatus
     });
     
     if (!ticket) {
@@ -141,7 +139,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     
-    if (!deleteTicket(id)) {
+    if (!await deleteTicket(id)) {
       return NextResponse.json(
         { success: false, error: '删除失败' },
         { status: 500 }

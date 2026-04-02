@@ -44,7 +44,8 @@
 │   ├── lib/                # 工具库
 │   │   ├── utils.ts        # 通用工具函数 (cn)
 │   │   ├── pipeline-engine.ts  # 流水线执行引擎
-│   │   ├── pipeline-store.ts   # 流水线文件存储
+│   │   ├── pipeline-db-store.ts   # 流水线数据库存储
+│   │   ├── ticket-db-store.ts     # 工单数据库存储
 │   │   ├── global-config.ts    # 全局配置管理
 │   │   └── file-store.ts       # 文件存储工具
 │   ├── types/              # TypeScript 类型定义
@@ -128,6 +129,14 @@
 在Supabase控制台的SQL Editor中执行迁移脚本。
 
 ## 关键决策
+
+### 统一使用数据库存储
+- **问题**：存储方式不一致，流水线和工单使用文件存储，其他模块使用数据库
+- **解决方案**：统一使用数据库存储
+  - 创建 `pipeline-db-store.ts` 替代 `pipeline-store.ts`
+  - 创建 `ticket-db-store.ts` 替代 `ticket-store.ts`
+  - 删除文件存储相关代码和数据目录
+  - 所有 API 路由统一使用数据库存储层
 
 ### 流水线绑定项目
 - **问题**：流水线不区分项目，可以选择任意项目的智能体，执行时缺少项目上下文

@@ -5,7 +5,7 @@ import {
   unpublishPipeline,
   archivePipeline,
   restorePipeline
-} from '@/lib/pipeline-store';
+} from '@/lib/pipeline-db-store';
 
 // POST /api/pipelines/[id]/status - 更改流水线状态
 // Body: { action: 'publish' | 'unpublish' | 'archive' | 'restore' }
@@ -29,16 +29,16 @@ export async function POST(
     
     switch (action) {
       case 'publish':
-        pipeline = publishPipeline(id);
+        pipeline = await publishPipeline(id);
         break;
       case 'unpublish':
-        pipeline = unpublishPipeline(id);
+        pipeline = await unpublishPipeline(id);
         break;
       case 'archive':
-        pipeline = archivePipeline(id);
+        pipeline = await archivePipeline(id);
         break;
       case 'restore':
-        pipeline = restorePipeline(id);
+        pipeline = await restorePipeline(id);
         break;
       default:
         return NextResponse.json(

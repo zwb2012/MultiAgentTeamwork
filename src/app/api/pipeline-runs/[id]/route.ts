@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPipelineRun, getPipeline } from '@/lib/pipeline-store';
+import { getPipelineRun, getPipeline } from '@/lib/pipeline-db-store';
 
 // GET /api/pipeline-runs/[id] - 获取流水线运行详情
 export async function GET(
@@ -10,7 +10,7 @@ export async function GET(
     const { id } = await params;
     
     // 1. 获取运行记录
-    const run = getPipelineRun(id);
+    const run = await getPipelineRun(id);
     
     if (!run) {
       return NextResponse.json(
@@ -20,7 +20,7 @@ export async function GET(
     }
     
     // 2. 获取流水线信息
-    const pipeline = getPipeline(run.pipeline_id);
+    const pipeline = await getPipeline(run.pipeline_id);
     
     // 3. 构建返回数据
     const result = {
@@ -29,7 +29,7 @@ export async function GET(
         pipeline_name: pipeline?.name || '未知流水线',
         pipeline_status: pipeline?.status
       },
-      node_runs: [], // 文件存储模式暂时不支持节点运行详情
+      node_runs: [], // TODO: 从数据库获取节点运行详情
       agents: [],
       agent_tasks: [],
       messages: [],

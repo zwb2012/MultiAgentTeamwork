@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  getPipeline,
-  runPipeline,
-  getPipelineRuns,
-  publishPipeline,
-  unpublishPipeline,
-  archivePipeline,
-  restorePipeline
-} from '@/lib/pipeline-store';
+  runPipeline
+} from '@/lib/pipeline-db-store';
 import type { TicketInput } from '@/types/pipeline';
 
 // POST /api/pipelines/[id]/run - 运行流水线
@@ -29,7 +23,7 @@ export async function POST(
       labels: body.ticket.labels
     } : undefined;
     
-    const run = runPipeline(id, ticket);
+    const run = await runPipeline(id, ticket);
     
     return NextResponse.json({ 
       success: true, 
@@ -40,28 +34,6 @@ export async function POST(
     console.error('运行流水线失败:', error);
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '运行流水线失败' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET /api/pipelines/[id]/run - 获取运行记录
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const runs = getPipelineRuns(id);
-    
-    return NextResponse.json({ 
-      success: true, 
-      data: runs 
-    });
-  } catch (error) {
-    console.error('获取运行记录失败:', error);
-    return NextResponse.json(
-      { success: false, error: '获取运行记录失败' },
       { status: 500 }
     );
   }

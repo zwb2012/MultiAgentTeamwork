@@ -1,6 +1,6 @@
 // 项目流水线 API
 import { NextRequest, NextResponse } from 'next/server';
-import { getPipelinesByProject, createPipeline } from '@/lib/pipeline-store';
+import { getPipelinesByProject, createPipeline } from '@/lib/pipeline-db-store';
 
 // GET /api/projects/[id]/pipelines - 获取项目的流水线列表
 export async function GET(
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const pipelines = getPipelinesByProject(id);
+    const pipelines = await getPipelinesByProject(id);
     
     return NextResponse.json({ 
       success: true, 
@@ -41,7 +41,7 @@ export async function POST(
       );
     }
     
-    const pipeline = createPipeline({
+    const pipeline = await createPipeline({
       name,
       description,
       project_id: projectId,
