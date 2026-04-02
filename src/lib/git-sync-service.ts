@@ -150,7 +150,7 @@ export class GitSyncService {
 
   /**
    * 初始化本地项目（当远程仓库不存在或未初始化时）
-   * 仅创建本地目录和基础文件，不初始化 git
+   * 仅在本地初始化，不与远程仓库交互
    */
   private async initLocalProject(
     project: {
@@ -164,7 +164,7 @@ export class GitSyncService {
     projectDir: string,
     _remoteStatus: RemoteStatus
   ): Promise<SyncResult> {
-    console.log(`远程仓库未初始化，本地创建项目目录: ${project.name}`);
+    console.log(`远程仓库未初始化，本地创建项目: ${project.name}`);
     
     // 创建项目目录
     await fs.mkdir(projectDir, { recursive: true });
@@ -210,30 +210,35 @@ temp/
 `;
     await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreContent, 'utf8');
     
-    // 创建项目元信息文件
-    const metaInfo = {
-      id: project.id,
-      name: project.name,
-      description: project.description,
-      git_url: project.git_url,
-      git_branch: project.git_branch,
-      created_at: new Date().toISOString(),
-      platform: process.platform
-    };
-    await fs.writeFile(
-      path.join(projectDir, '.project-meta.json'), 
-      JSON.stringify(metaInfo, null, 2), 
-      'utf8'
+    // git init
+    await execAsync('git init', { cwd: projectDir });
+    
+    // git add .
+    await execAsync('git add .', { cwd: projectDir });
+    
+    // git commit -m "first commit"
+    await execAsync('git commit -m "first commit"', { cwd: projectDir });
+    
+    // git branch -M <branch>
+    await execAsync(`git branch -M ${project.git_branch}`, { cwd: projectDir });
+    
+    // git remote add origin <url>
+    const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
+    await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: projectDir });
+    
+    console.log(`项目已本地初始化: ${projectDir}`);
+    
+    // 获取当前 commit
+    const { stdout: commitSha } = await execAsync(
+      'git rev-parse HEAD',
+      { cwd: projectDir }
     );
     
-    console.log(`项目目录已创建: ${projectDir}`);
-    
-    // 返回初始化结果（没有 commit，因为是空项目）
     return {
-      commitSha: '',
-      commitsCount: 0,
+      commitSha: commitSha.trim(),
+      commitsCount: 1,
       changes: {
-        added: ['.gitignore', '.project-meta.json'],
+        added: ['.gitignore'],
         modified: [],
         deleted: []
       },
