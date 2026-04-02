@@ -150,6 +150,7 @@ export class GitSyncService {
 
   /**
    * 初始化本地项目（当远程仓库不存在或未初始化时）
+   * 仅创建本地目录和基础文件，不初始化 git
    */
   private async initLocalProject(
     project: {
@@ -163,33 +164,10 @@ export class GitSyncService {
     projectDir: string,
     _remoteStatus: RemoteStatus
   ): Promise<SyncResult> {
-    console.log(`远程仓库未初始化，本地创建项目: ${project.name}`);
+    console.log(`远程仓库未初始化，本地创建项目目录: ${project.name}`);
     
     // 创建项目目录
     await fs.mkdir(projectDir, { recursive: true });
-    
-    // 初始化 Git 仓库
-    await execAsync('git init', { cwd: projectDir });
-    
-    // 设置默认分支
-    await execAsync(`git checkout -b ${project.git_branch}`, { cwd: projectDir });
-    
-    // 创建 README.md
-    const readmeContent = `# ${project.name}
-
-${project.description || '项目描述'}
-
-## 项目信息
-
-- 项目ID: ${project.id}
-- 创建时间: ${new Date().toLocaleString('zh-CN')}
-- 默认分支: ${project.git_branch}
-
-## 开始使用
-
-本项目由 AI Agent 协同平台自动创建。
-`;
-    await fs.writeFile(path.join(projectDir, 'README.md'), readmeContent, 'utf8');
     
     // 创建 .gitignore
     const gitignoreContent = `# Dependencies
@@ -232,37 +210,30 @@ temp/
 `;
     await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreContent, 'utf8');
     
-    // 添加远程仓库
-    const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
-    await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: projectDir });
-    
-    // 提交初始文件
-    await execAsync('git add .', { cwd: projectDir });
-    await execAsync('git commit -m "Initial commit: 项目初始化"', { cwd: projectDir });
-    
-    // 推送到远程
-    try {
-      await execAsync(`git push -u origin ${project.git_branch}`, { 
-        cwd: projectDir,
-        timeout: 60000 
-      });
-      console.log(`项目已推送到远程仓库: ${project.git_url}`);
-    } catch (pushError) {
-      console.error('推送到远程失败:', pushError);
-      // 即使推送失败，本地项目已创建，继续返回结果
-    }
-    
-    // 获取当前 commit
-    const { stdout: commitSha } = await execAsync(
-      'git rev-parse HEAD',
-      { cwd: projectDir }
+    // 创建项目元信息文件
+    const metaInfo = {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      git_url: project.git_url,
+      git_branch: project.git_branch,
+      created_at: new Date().toISOString(),
+      platform: process.platform
+    };
+    await fs.writeFile(
+      path.join(projectDir, '.project-meta.json'), 
+      JSON.stringify(metaInfo, null, 2), 
+      'utf8'
     );
     
+    console.log(`项目目录已创建: ${projectDir}`);
+    
+    // 返回初始化结果（没有 commit，因为是空项目）
     return {
-      commitSha: commitSha.trim(),
-      commitsCount: 1,
+      commitSha: '',
+      commitsCount: 0,
       changes: {
-        added: ['README.md', '.gitignore'],
+        added: ['.gitignore', '.project-meta.json'],
         modified: [],
         deleted: []
       },
