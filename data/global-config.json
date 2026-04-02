@@ -1,0 +1,12 @@
+{
+  "llm": {
+    "default_api_key": "",
+    "default_base_url": "https://api.coze.cn",
+    "default_model": "doubao-seed-1-8-251228"
+  },
+  "settings": {
+    "auto_health_check": false,
+    "health_check_interval": 30
+  },
+  "updated_at": "2026-04-01T15:06:06.874Z"
+}
