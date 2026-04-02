@@ -344,16 +344,20 @@ export default function ProjectAgentsPage() {
   const generateDefaultPrompt = (roleKey: string, agentName: string): string => {
     const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
     if (roleConfig) {
-      const nameToUse = agentName || roleConfig.name;
-      return roleConfig.system_prompt_template.replace(/{name}/g, nameToUse);
+      // 如果没有提供名称，保留 {name} 占位符，让用户输入名称后替换
+      if (!agentName) {
+        return roleConfig.system_prompt_template;
+      }
+      return roleConfig.system_prompt_template.replace(/{name}/g, agentName);
     }
     // 如果没有找到角色配置，返回基本提示词
-    return `你是一个智能助手，名字叫${agentName || '助手'}。请根据具体任务提供专业的帮助。`;
+    return `你是一个智能助手，名字叫${agentName || '{name}'}。请根据具体任务提供专业的帮助。`;
   };
 
   // 处理角色变化
   const handleRoleChange = (roleKey: string) => {
     const roleConfig = roleConfigs.find(r => r.role_key === roleKey);
+    // 使用当前输入的名称生成提示词，如果没有则保留 {name} 占位符
     const defaultPrompt = generateDefaultPrompt(roleKey, formData.name);
     setFormData(prev => ({
       ...prev,
@@ -365,18 +369,11 @@ export default function ProjectAgentsPage() {
 
   // 处理名称变化（同步更新提示词中的{name}）
   const handleNameChange = (name: string) => {
-    // 如果提示词为空或包含 {name} 占位符，则重新生成提示词
-    const hasPlaceholder = formData.system_prompt.includes('{name}');
-    const isEmpty = !formData.system_prompt.trim();
+    const roleConfig = roleConfigs.find(r => r.role_key === formData.role);
     
-    if (hasPlaceholder || isEmpty) {
-      const roleConfig = roleConfigs.find(r => r.role_key === formData.role);
-      let newPrompt = formData.system_prompt;
-      
-      if (roleConfig && (isEmpty || hasPlaceholder)) {
-        // 重新生成提示词，使用新的名称
-        newPrompt = roleConfig.system_prompt_template.replace(/{name}/g, name || roleConfig.name);
-      }
+    if (roleConfig) {
+      // 根据角色配置重新生成提示词，使用新名称
+      const newPrompt = roleConfig.system_prompt_template.replace(/{name}/g, name || '{name}');
       
       setFormData(prev => ({
         ...prev,
