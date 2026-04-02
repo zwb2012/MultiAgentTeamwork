@@ -13,7 +13,10 @@ import {
   Flag,
   PlayCircle,
   X,
-  Trash2
+  Trash2,
+  Send,
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
 import ReactFlow, {
   Node,
@@ -233,6 +236,7 @@ function PipelineEditorContent() {
     name: '新流水线',
     description: '',
     status: 'draft',
+    run_status: 'idle',
     nodes: []
   });
   
@@ -241,6 +245,8 @@ function PipelineEditorContent() {
   const [agents, setAgents] = useState<any[]>([]);
   const [pipelineId, setPipelineId] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   
   // 节点编辑表单
   const [nodeForm, setNodeForm] = useState({
@@ -478,6 +484,8 @@ function PipelineEditorContent() {
   // 保存流水线
   const handleSave = async () => {
     try {
+      setIsSaving(true);
+      
       // 从 React Flow 节点构建流水线节点
       const pipelineNodes = nodes.map((node, index) => {
         const existingNode = pipeline.nodes?.find(n => n.id === node.id);
@@ -517,17 +525,73 @@ function PipelineEditorContent() {
       const result = await response.json();
       
       if (result.success) {
-        alert('保存成功');
         if (!pipelineId && result.data?.id) {
           setPipelineId(result.data.id);
           window.history.pushState({}, '', `?id=${result.data.id}`);
         }
+        // 更新状态
+        setPipeline(prev => ({
+          ...prev,
+          ...result.data
+        }));
+        alert('保存成功');
       } else {
         alert('保存失败: ' + result.error);
       }
     } catch (error) {
       console.error('保存失败:', error);
       alert('保存失败');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 发布流水线
+  const handlePublish = async () => {
+    if (!pipelineId) {
+      alert('请先保存流水线');
+      return;
+    }
+    
+    // 验证流水线
+    const hasStart = nodes.some(n => n.data.nodeType === 'start');
+    const hasEnd = nodes.some(n => n.data.nodeType === 'end');
+    
+    if (!hasStart) {
+      alert('流水线必须有开始节点');
+      return;
+    }
+    
+    if (nodes.length < 2) {
+      alert('流水线必须至少有2个节点');
+      return;
+    }
+    
+    try {
+      setIsPublishing(true);
+      
+      const response = await fetch(`/api/pipelines/${pipelineId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish' })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setPipeline(prev => ({
+          ...prev,
+          status: 'published'
+        }));
+        alert('发布成功，流水线现在可以执行了');
+      } else {
+        alert('发布失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('发布失败:', error);
+      alert('发布失败');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -575,20 +639,88 @@ function PipelineEditorContent() {
             className="w-64"
             placeholder="流水线名称"
           />
-          <Badge variant={pipeline.status === 'active' ? 'default' : 'secondary'}>
-            {pipeline.status}
-          </Badge>
+          {/* 状态显示 */}
+          <div className="flex items-center gap-2">
+            {pipeline.status === 'draft' && (
+              <Badge variant="outline" className="bg-gray-100 text-gray-700">
+                草稿
+              </Badge>
+            )}
+            {pipeline.status === 'published' && (
+              <Badge variant="outline" className="bg-green-100 text-green-700">
+                已发布
+              </Badge>
+            )}
+            {pipeline.status === 'archived' && (
+              <Badge variant="outline" className="bg-gray-100 text-gray-500">
+                已归档
+              </Badge>
+            )}
+            {pipeline.run_status === 'running' && (
+              <Badge variant="outline" className="bg-blue-100 text-blue-700">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                运行中
+              </Badge>
+            )}
+            {pipeline.run_status === 'success' && (
+              <Badge variant="outline" className="bg-green-100 text-green-700">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                执行成功
+              </Badge>
+            )}
+            {pipeline.run_status === 'failed' && (
+              <Badge variant="outline" className="bg-red-100 text-red-700">
+                执行失败
+              </Badge>
+            )}
+          </div>
         </div>
         
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleSave}>
-            <Save className="h-4 w-4 mr-2" />
-            保存
+          <Button variant="outline" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                保存中...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                保存
+              </>
+            )}
           </Button>
-          <Button onClick={handleRun} disabled={!pipelineId}>
-            <Play className="h-4 w-4 mr-2" />
-            运行
-          </Button>
+          
+          {/* 发布按钮 - 仅草稿状态显示 */}
+          {pipeline.status === 'draft' && (
+            <Button 
+              variant="default" 
+              onClick={handlePublish} 
+              disabled={isPublishing || !pipelineId}
+            >
+              {isPublishing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  发布中...
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  发布
+                </>
+              )}
+            </Button>
+          )}
+          
+          {/* 运行按钮 - 仅已发布状态显示 */}
+          {pipeline.status === 'published' && (
+            <Link href={`/pipelines/run?id=${pipelineId}`}>
+              <Button disabled={!pipelineId || pipeline.run_status === 'running'}>
+                <Play className="h-4 w-4 mr-2" />
+                执行
+              </Button>
+            </Link>
+          )}
         </div>
       </header>
 

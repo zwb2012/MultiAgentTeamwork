@@ -13,7 +13,7 @@ import {
   fileExists,
   PIPELINES_DIR
 } from './file-store';
-import type { Pipeline, PipelineNode, PipelineRun } from '@/types/agent';
+import type { Pipeline, PipelineNode, PipelineRun, TicketInput, PipelineDefinitionStatus, PipelineRunStatus } from '@/types/pipeline';
 
 // 生成唯一ID
 function generateId(): string {
@@ -142,9 +142,9 @@ function generateFrontmatter(data: Record<string, any>): string {
 /**
  * 获取所有流水线
  */
-export function getAllPipelines(): any[] {
+export function getAllPipelines(): Pipeline[] {
   const dirs = listDirs(PIPELINES_DIR);
-  const pipelines: any[] = [];
+  const pipelines: Pipeline[] = [];
   
   for (const dir of dirs) {
     const configPath = path.join(PIPELINES_DIR, dir, 'config.md');
@@ -160,10 +160,13 @@ export function getAllPipelines(): any[] {
         description: body.trim(),
         trigger_type: data.trigger_type || 'manual',
         status: data.status || 'draft',
+        run_status: data.run_status || 'idle',
         is_active: data.is_active !== false,
         created_at: data.created_at || new Date().toISOString(),
-        nodes: nodes,
-        ...data
+        updated_at: data.updated_at,
+        last_run_at: data.last_run_at,
+        last_run_status: data.last_run_status,
+        nodes: nodes
       });
     }
   }
@@ -176,7 +179,7 @@ export function getAllPipelines(): any[] {
 /**
  * 获取流水线详情
  */
-export function getPipeline(id: string): any | null {
+export function getPipeline(id: string): Pipeline | null {
   const configPath = path.join(PIPELINES_DIR, id, 'config.md');
   const content = readFile(configPath);
   
@@ -193,10 +196,13 @@ export function getPipeline(id: string): any | null {
     description: body.trim(),
     trigger_type: data.trigger_type || 'manual',
     status: data.status || 'draft',
+    run_status: data.run_status || 'idle',
     is_active: data.is_active !== false,
     created_at: data.created_at || new Date().toISOString(),
-    nodes: nodes,
-    ...data
+    updated_at: data.updated_at,
+    last_run_at: data.last_run_at,
+    last_run_status: data.last_run_status,
+    nodes: nodes
   };
 }
 
@@ -264,8 +270,8 @@ export function createPipeline(data: {
   name: string;
   description?: string;
   trigger_type?: string;
-  nodes?: any[];
-}): any {
+  nodes?: PipelineNode[];
+}): Pipeline {
   const id = generateId().substring(0, 8);
   const now = new Date().toISOString();
   
@@ -273,6 +279,7 @@ export function createPipeline(data: {
     name: data.name,
     trigger_type: data.trigger_type || 'manual',
     status: 'draft',
+    run_status: 'idle',
     is_active: true,
     created_at: now
   });
@@ -289,7 +296,7 @@ ${data.description || ''}
     savePipelineNodes(id, data.nodes);
   }
   
-  return getPipeline(id);
+  return getPipeline(id)!;
 }
 
 /**
@@ -318,9 +325,12 @@ order_index: ${index}
 export function updatePipeline(id: string, data: {
   name?: string;
   description?: string;
-  status?: string;
-  nodes?: any[];
-}): any | null {
+  status?: PipelineDefinitionStatus;
+  run_status?: PipelineRunStatus;
+  nodes?: PipelineNode[];
+  last_run_at?: string;
+  last_run_status?: string;
+}): Pipeline | null {
   const existing = getPipeline(id);
   if (!existing) return null;
   
@@ -330,9 +340,12 @@ export function updatePipeline(id: string, data: {
     name: data.name || existing.name,
     trigger_type: existing.trigger_type,
     status: data.status || existing.status,
+    run_status: data.run_status || existing.run_status,
     is_active: existing.is_active,
     created_at: existing.created_at,
-    updated_at: now
+    updated_at: now,
+    last_run_at: data.last_run_at !== undefined ? data.last_run_at : existing.last_run_at,
+    last_run_status: data.last_run_status !== undefined ? data.last_run_status : existing.last_run_status
   });
   
   const content = `${frontmatter}
@@ -369,86 +382,270 @@ export function deletePipeline(id: string): boolean {
 }
 
 /**
- * 运行流水线（模拟）
+ * 发布流水线
  */
-export function runPipeline(id: string): any {
+export function publishPipeline(id: string): Pipeline | null {
+  const pipeline = getPipeline(id);
+  if (!pipeline) return null;
+  
+  if (pipeline.status === 'archived') {
+    throw new Error('已归档的流水线不能发布');
+  }
+  
+  // 验证流水线是否有节点
+  if (!pipeline.nodes || pipeline.nodes.length === 0) {
+    throw new Error('流水线必须至少有一个节点才能发布');
+  }
+  
+  // 验证是否有开始和结束节点
+  const hasStart = pipeline.nodes.some(n => n.node_type === 'start');
+  const hasEnd = pipeline.nodes.some(n => n.node_type === 'end');
+  
+  if (!hasStart) {
+    throw new Error('流水线必须有开始节点');
+  }
+  
+  return updatePipeline(id, { status: 'published' });
+}
+
+/**
+ * 撤回流水线（从已发布变为草稿）
+ */
+export function unpublishPipeline(id: string): Pipeline | null {
+  const pipeline = getPipeline(id);
+  if (!pipeline) return null;
+  
+  if (pipeline.run_status === 'running') {
+    throw new Error('运行中的流水线不能撤回');
+  }
+  
+  return updatePipeline(id, { status: 'draft' });
+}
+
+/**
+ * 归档流水线
+ */
+export function archivePipeline(id: string): Pipeline | null {
+  const pipeline = getPipeline(id);
+  if (!pipeline) return null;
+  
+  if (pipeline.run_status === 'running') {
+    throw new Error('运行中的流水线不能归档');
+  }
+  
+  return updatePipeline(id, { status: 'archived' });
+}
+
+/**
+ * 恢复流水线（从归档变为草稿）
+ */
+export function restorePipeline(id: string): Pipeline | null {
+  return updatePipeline(id, { status: 'draft' });
+}
+
+/**
+ * 运行流水线（支持工单输入）
+ */
+export function runPipeline(id: string, ticket?: TicketInput): PipelineRun {
   const pipeline = getPipeline(id);
   if (!pipeline) {
     throw new Error('流水线不存在');
   }
   
+  if (pipeline.status !== 'published') {
+    throw new Error('只有已发布的流水线才能执行');
+  }
+  
+  if (pipeline.run_status === 'running') {
+    throw new Error('流水线正在运行中，请等待执行完成');
+  }
+  
   const runId = generateId().substring(0, 8);
   const now = new Date().toISOString();
+  
+  // 更新流水线运行状态
+  updatePipeline(id, { run_status: 'running' });
   
   // 创建运行记录
   const runFrontmatter = generateFrontmatter({
     pipeline_id: id,
     status: 'running',
     trigger_by: 'manual',
+    ticket_id: ticket?.id,
+    ticket_type: ticket?.type,
     total_nodes: pipeline.nodes?.length || 0,
-    started_at: now
+    started_at: now,
+    input_data: ticket ? {
+      ticket_id: ticket.id,
+      ticket_type: ticket.type,
+      ticket_title: ticket.title,
+      ticket_description: ticket.description,
+      ticket_priority: ticket.priority,
+      ticket_labels: ticket.labels
+    } : undefined
   });
   
-  const runContent = `${runFrontmatter}
+  let runContent = `${runFrontmatter}
 
 # 执行日志
 
-流水线开始执行...
 `;
+  
+  if (ticket) {
+    runContent += `## 工单信息
+
+- **类型**: ${ticket.type === 'bug' ? 'Bug' : ticket.type === 'feature' ? '新需求' : ticket.type === 'improvement' ? '改进' : '任务'}
+- **标题**: ${ticket.title}
+- **优先级**: ${ticket.priority || 'medium'}
+- **描述**: ${ticket.description}
+
+---
+
+`;
+  }
+  
+  runContent += `流水线开始执行...`;
   
   const runsDir = path.join(PIPELINES_DIR, id, 'runs');
   const runPath = path.join(runsDir, `${runId}.md`);
   writeFile(runPath, runContent);
   
   // 异步执行（实际生产环境应该用消息队列）
-  executePipelineAsync(id, runId, pipeline.nodes || []);
+  executePipelineAsync(id, runId, pipeline.nodes || [], ticket);
   
   return {
     id: runId,
     pipeline_id: id,
     status: 'running',
-    started_at: now
+    trigger_by: 'manual',
+    ticket_id: ticket?.id,
+    ticket_type: ticket?.type,
+    total_nodes: pipeline.nodes?.length || 0,
+    completed_nodes: 0,
+    failed_nodes: 0,
+    started_at: now,
+    created_at: now,
+    input_data: ticket ? {
+      ticket_id: ticket.id,
+      ticket_type: ticket.type,
+      ticket_title: ticket.title,
+      ticket_description: ticket.description
+    } : undefined
   };
 }
 
 /**
  * 异步执行流水线
  */
-async function executePipelineAsync(pipelineId: string, runId: string, nodes: any[]): Promise<void> {
+async function executePipelineAsync(
+  pipelineId: string, 
+  runId: string, 
+  nodes: PipelineNode[],
+  ticket?: TicketInput
+): Promise<void> {
   const runPath = path.join(PIPELINES_DIR, pipelineId, 'runs', `${runId}.md`);
   
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i];
+  try {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      
+      // 更新运行记录
+      const timestamp = new Date().toLocaleTimeString();
+      let logEntry = `\n## [${timestamp}] 节点: ${node.name}\n\n`;
+      logEntry += `- 类型: ${node.node_type}\n`;
+      logEntry += `- 状态: 执行中...\n\n`;
+      
+      const currentContent = readFile(runPath) || '';
+      writeFile(runPath, currentContent + logEntry);
+      
+      // 模拟执行（实际应该调用智能体）
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 记录完成
+      const completeEntry = `状态: ✅ 完成\n`;
+      writeFile(runPath, (readFile(runPath) || '') + completeEntry);
+    }
     
-    // 更新运行记录
-    const timestamp = new Date().toLocaleTimeString();
-    const logEntry = `\n## [${timestamp}] 节点: ${node.name}\n\n状态: 执行中...\n`;
+    // 标记完成
+    const finalContent = readFile(runPath) || '';
+    const endTimestamp = new Date().toLocaleTimeString();
+    const endEntry = `\n---\n\n## [${endTimestamp}] 流水线执行完成 ✅\n`;
     
-    const currentContent = readFile(runPath) || '';
-    writeFile(runPath, currentContent + logEntry);
+    writeFile(runPath, finalContent + endEntry);
     
-    // 模拟执行
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // 更新状态为success
+    const { data } = parseFrontmatter(finalContent);
+    const updatedFrontmatter = generateFrontmatter({
+      ...data,
+      status: 'success',
+      completed_at: new Date().toISOString()
+    });
     
-    // 记录完成
-    const completeEntry = `状态: ✅ 完成\n`;
-    writeFile(runPath, readFile(runPath) + completeEntry);
+    // 更新流水线状态
+    updatePipeline(pipelineId, { 
+      run_status: 'success',
+      last_run_at: new Date().toISOString(),
+      last_run_status: 'success'
+    });
+    
+    writeFile(runPath, `${updatedFrontmatter}\n${finalContent.split('---\n').slice(2).join('---\n')}${endEntry}`);
+    
+  } catch (error) {
+    // 记录失败
+    const errorEntry = `\n## ❌ 执行失败\n\n错误: ${error instanceof Error ? error.message : '未知错误'}\n`;
+    writeFile(runPath, (readFile(runPath) || '') + errorEntry);
+    
+    // 更新流水线状态
+    updatePipeline(pipelineId, { 
+      run_status: 'failed',
+      last_run_at: new Date().toISOString(),
+      last_run_status: 'failed'
+    });
   }
+}
+
+/**
+ * 获取流水线运行记录
+ */
+export function getPipelineRuns(pipelineId: string): PipelineRun[] {
+  const runsDir = path.join(PIPELINES_DIR, pipelineId, 'runs');
+  const runs: PipelineRun[] = [];
   
-  // 标记完成
-  const finalContent = readFile(runPath) || '';
-  const endTimestamp = new Date().toLocaleTimeString();
-  const endEntry = `\n---\n\n## [${endTimestamp}] 流水线执行完成 ✅\n`;
-  
-  writeFile(runPath, finalContent + endEntry);
-  
-  // 更新状态为success
-  const { data, body } = parseFrontmatter(finalContent);
-  const updatedFrontmatter = generateFrontmatter({
-    ...data,
-    status: 'success',
-    completed_at: new Date().toISOString()
-  });
-  
-  writeFile(runPath, `${updatedFrontmatter}\n${body}`);
+  try {
+    const fs = require('fs');
+    if (!fs.existsSync(runsDir)) return [];
+    
+    const files = fs.readdirSync(runsDir).filter((f: string) => f.endsWith('.md'));
+    
+    for (const file of files) {
+      const runPath = path.join(runsDir, file);
+      const content = readFile(runPath);
+      
+      if (content) {
+        const { data } = parseFrontmatter(content);
+        runs.push({
+          id: file.replace('.md', ''),
+          pipeline_id: pipelineId,
+          status: data.status || 'running',
+          trigger_by: data.trigger_by || 'manual',
+          ticket_id: data.ticket_id,
+          ticket_type: data.ticket_type,
+          total_nodes: data.total_nodes || 0,
+          completed_nodes: data.completed_nodes || 0,
+          failed_nodes: data.failed_nodes || 0,
+          started_at: data.started_at,
+          completed_at: data.completed_at,
+          created_at: data.started_at || new Date().toISOString(),
+          input_data: data.input_data
+        });
+      }
+    }
+    
+    return runs.sort((a, b) => 
+      new Date(b.started_at || 0).getTime() - new Date(a.started_at || 0).getTime()
+    );
+  } catch (error) {
+    console.error('获取运行记录失败:', error);
+    return [];
+  }
 }

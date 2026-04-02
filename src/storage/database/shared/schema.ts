@@ -266,15 +266,26 @@ export const pipelines = pgTable(
     // 全局配置
     config: jsonb("config"), // { timeout, retry_policy, notification }
     
-    // 状态
-    status: varchar("status", { length: 20 }).notNull().default("draft"), // draft, active, paused, archived
-    is_active: boolean("is_active").default(true).notNull(),
+    // 定义状态：draft(草稿), published(已发布), archived(已归档)
+    status: varchar("status", { length: 20 }).notNull().default("draft"),
     
+    // 运行状态：idle(空闲), running(运行中), success(成功), failed(失败), cancelled(已取消)
+    run_status: varchar("run_status", { length: 20 }).notNull().default("idle"),
+    
+    // 当前运行ID
+    current_run_id: varchar("current_run_id", { length: 36 }),
+    
+    // 最后运行信息
+    last_run_at: timestamp("last_run_at", { withTimezone: true }),
+    last_run_status: varchar("last_run_status", { length: 20 }),
+    
+    is_active: boolean("is_active").default(true).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },
   (table) => [
     index("pipelines_status_idx").on(table.status),
+    index("pipelines_run_status_idx").on(table.run_status),
     index("pipelines_is_active_idx").on(table.is_active),
     index("pipelines_created_at_idx").on(table.created_at),
     index("pipelines_project_id_idx").on(table.project_id),

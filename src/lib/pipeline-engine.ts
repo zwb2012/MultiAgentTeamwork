@@ -36,7 +36,7 @@ export class PipelineEngine {
       throw new Error('流水线不存在');
     }
     
-    if (pipeline.status !== 'active') {
+    if (pipeline.status !== 'published') {
       throw new Error(`流水线状态为 ${pipeline.status}，无法执行`);
     }
     

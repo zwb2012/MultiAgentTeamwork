@@ -4,8 +4,94 @@
 
 import type { Agent } from './agent';
 
-// 流水线状态
-export type PipelineStatus = 'draft' | 'active' | 'paused' | 'archived';
+// ============================================
+// 流水线状态机
+// ============================================
+// 
+// 状态转换规则：
+// draft → published (发布)
+// published → draft (撤回编辑)
+// published → running (执行)
+// running → success / failed / cancelled (执行结束)
+// success/failed/cancelled → published (重新执行)
+// published → archived (归档)
+// archived → draft (恢复编辑)
+//
+// ============================================
+
+// 流水线定义状态（元数据状态）
+export type PipelineDefinitionStatus = 'draft' | 'published' | 'archived';
+
+// 流水线运行状态（实例状态）
+export type PipelineRunStatus = 'idle' | 'running' | 'success' | 'failed' | 'cancelled';
+
+// 兼容旧版本的流水线状态
+export type PipelineStatus = PipelineDefinitionStatus;
+
+// 流水线完整状态（组合定义状态和运行状态）
+export interface PipelineFullStatus {
+  definition_status: PipelineDefinitionStatus;
+  run_status: PipelineRunStatus;
+}
+
+// 状态配置
+export const PIPELINE_STATUS_CONFIG = {
+  draft: {
+    label: '草稿',
+    description: '编辑中，不可执行',
+    color: 'bg-gray-100 text-gray-700',
+    borderColor: 'border-gray-300',
+    icon: 'Edit'
+  },
+  published: {
+    label: '已发布',
+    description: '可以执行',
+    color: 'bg-green-100 text-green-700',
+    borderColor: 'border-green-400',
+    icon: 'CheckCircle'
+  },
+  archived: {
+    label: '已归档',
+    description: '已停用',
+    color: 'bg-gray-100 text-gray-500',
+    borderColor: 'border-gray-300',
+    icon: 'Archive'
+  }
+} as const;
+
+// 运行状态配置
+export const PIPELINE_RUN_STATUS_CONFIG = {
+  idle: {
+    label: '空闲',
+    description: '未运行',
+    color: 'bg-gray-50 text-gray-600',
+    icon: 'Circle'
+  },
+  running: {
+    label: '运行中',
+    description: '正在执行',
+    color: 'bg-blue-100 text-blue-700',
+    icon: 'Loader2'
+  },
+  success: {
+    label: '执行成功',
+    description: '已完成',
+    color: 'bg-green-100 text-green-700',
+    icon: 'CheckCircle2'
+  },
+  failed: {
+    label: '执行失败',
+    description: '出现错误',
+    color: 'bg-red-100 text-red-700',
+    icon: 'XCircle'
+  },
+  cancelled: {
+    label: '已取消',
+    description: '手动取消',
+    color: 'bg-yellow-100 text-yellow-700',
+    icon: 'MinusCircle'
+  }
+} as const;
 
 // 流水线触发类型
 export type TriggerType = 'manual' | 'scheduled' | 'webhook';
@@ -223,6 +309,19 @@ export type RunStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelle
 // 节点运行状态
 export type NodeRunStatus = 'pending' | 'waiting' | 'running' | 'success' | 'failed' | 'skipped';
 
+// 工单类型
+export type TicketType = 'bug' | 'feature' | 'improvement' | 'task';
+
+// 工单信息（作为流水线输入）
+export interface TicketInput {
+  id: string;
+  type: TicketType;
+  title: string;
+  description: string;
+  priority?: 'low' | 'medium' | 'high' | 'critical';
+  labels?: string[];
+}
+
 // 流水线运行记录
 export interface PipelineRun {
   id: string;
@@ -235,6 +334,10 @@ export interface PipelineRun {
   // 运行配置
   trigger_by: TriggerType | 'manual';
   trigger_user?: string;
+  
+  // 工单信息
+  ticket_id?: string;
+  ticket_type?: TicketType;
   
   // 执行结果
   total_nodes: number;
@@ -310,6 +413,9 @@ export interface Pipeline {
   name: string;
   description?: string;
   
+  // 项目关联
+  project_id?: string;
+  
   // 触发配置
   trigger_type: TriggerType;
   trigger_config?: Record<string, any>;
@@ -328,8 +434,19 @@ export interface Pipeline {
     };
   };
   
-  // 状态
-  status: PipelineStatus;
+  // 定义状态：draft, published, archived
+  status: PipelineDefinitionStatus;
+  
+  // 运行状态：idle, running, success, failed, cancelled
+  run_status: PipelineRunStatus;
+  
+  // 当前运行ID
+  current_run_id?: string;
+  
+  // 最后运行信息
+  last_run_at?: string;
+  last_run_status?: RunStatus;
+  
   is_active: boolean;
   
   // 时间戳
