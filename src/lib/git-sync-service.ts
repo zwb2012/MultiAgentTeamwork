@@ -134,11 +134,22 @@ export class GitSyncService {
     // 检查项目是否已克隆（本地有.git目录）
     const isCloned = await this.isProjectCloned(projectDir);
     
+    // 检查本地是否有 commit
+    let hasLocalCommit = false;
+    if (isCloned) {
+      try {
+        await execAsync('git rev-parse HEAD', { cwd: projectDir });
+        hasLocalCommit = true;
+      } catch {
+        hasLocalCommit = false;
+      }
+    }
+    
     if (!remoteStatus.exists || !remoteStatus.initialized) {
       // 远程仓库不存在或未初始化
-      if (isCloned) {
-        // 本地已初始化，无需操作
-        console.log(`本地已初始化，远程仓库为空，跳过同步: ${project.name}`);
+      if (hasLocalCommit) {
+        // 本地有 commit，跳过同步
+        console.log(`本地已初始化且有提交，远程仓库为空，跳过同步: ${project.name}`);
         const { stdout: commitSha } = await execAsync('git rev-parse HEAD', { cwd: projectDir });
         return {
           commitSha: commitSha.trim(),
@@ -146,16 +157,16 @@ export class GitSyncService {
           changes: { added: [], modified: [], deleted: [] }
         };
       } else {
-        // 本地也未初始化，执行本地初始化
+        // 本地未初始化或没有 commit，执行本地初始化
         return await this.initLocalProject(project, projectDir, remoteStatus);
       }
     } else {
       // 远程仓库已初始化
-      if (isCloned) {
-        // 本地已克隆，拉取最新代码
+      if (hasLocalCommit) {
+        // 本地已克隆且有提交，拉取最新代码
         return await this.pullProject(project, projectDir);
       } else {
-        // 本地未克隆，克隆项目
+        // 本地未克隆或没有提交，克隆项目
         return await this.cloneProject(project, projectDir);
       }
     }
@@ -223,21 +234,42 @@ temp/
 `;
     await fs.writeFile(path.join(projectDir, '.gitignore'), gitignoreContent, 'utf8');
     
-    // git init
-    await execAsync('git init', { cwd: projectDir });
+    // 检查是否已有 .git 目录
+    const hasGitDir = await this.isProjectCloned(projectDir);
+    
+    if (!hasGitDir) {
+      // 没有 .git 目录，执行 git init
+      await execAsync('git init', { cwd: projectDir });
+    }
     
     // git add .
     await execAsync('git add .', { cwd: projectDir });
     
-    // git commit -m "first commit"
-    await execAsync('git commit -m "first commit"', { cwd: projectDir });
+    // 检查是否有内容需要提交
+    try {
+      const { stdout: status } = await execAsync('git status --porcelain', { cwd: projectDir });
+      if (status.trim()) {
+        // 有变更需要提交
+        await execAsync('git commit -m "first commit"', { cwd: projectDir });
+      }
+    } catch {
+      // 可能没有变更，忽略
+    }
     
     // git branch -M <branch>
     await execAsync(`git branch -M ${project.git_branch}`, { cwd: projectDir });
     
-    // git remote add origin <url>
-    const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
-    await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: projectDir });
+    // 检查是否已设置 remote
+    try {
+      await execAsync('git remote get-url origin', { cwd: projectDir });
+      // 已有 remote，更新 URL
+      const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
+      await execAsync(`git remote set-url origin ${authenticatedUrl}`, { cwd: projectDir });
+    } catch {
+      // 没有 remote，添加
+      const authenticatedUrl = await this.buildAuthenticatedUrl(project.git_url, project.git_token);
+      await execAsync(`git remote add origin ${authenticatedUrl}`, { cwd: projectDir });
+    }
     
     console.log(`项目已本地初始化: ${projectDir}`);
     
