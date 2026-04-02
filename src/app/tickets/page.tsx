@@ -1,16 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -18,9 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Ticket as TicketIcon, 
@@ -28,436 +32,556 @@ import {
   Bug,
   Lightbulb,
   Wrench,
-  ArrowRight,
-  User,
-  ListTodo
+  ClipboardList,
+  Folder,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Play,
+  Search
 } from 'lucide-react';
-import type { Ticket, Agent, TicketType, TicketPriority } from '@/types/agent';
+import type { Ticket, TicketType, TicketPriority } from '@/types/agent';
+import type { Project } from '@/types/project';
+
+// 工单类型配置
+const TICKET_TYPE_CONFIG = {
+  bug: { label: 'Bug 修复', icon: Bug, color: 'text-red-500' },
+  feature: { label: '新需求', icon: Lightbulb, color: 'text-blue-500' },
+  improvement: { label: '改进优化', icon: Wrench, color: 'text-green-500' },
+  task: { label: '通用任务', icon: ClipboardList, color: 'text-gray-500' }
+};
+
+// 优先级配置
+const PRIORITY_CONFIG = {
+  low: { label: '低', color: 'bg-gray-100 text-gray-700' },
+  medium: { label: '中', color: 'bg-blue-100 text-blue-700' },
+  high: { label: '高', color: 'bg-orange-100 text-orange-700' },
+  critical: { label: '紧急', color: 'bg-red-100 text-red-700' }
+};
+
+// 状态配置
+const STATUS_CONFIG = {
+  open: { label: '待处理', color: 'bg-yellow-100 text-yellow-700' },
+  in_progress: { label: '处理中', color: 'bg-blue-100 text-blue-700' },
+  resolved: { label: '已解决', color: 'bg-green-100 text-green-700' },
+  closed: { label: '已关闭', color: 'bg-gray-100 text-gray-500' }
+};
 
 export default function TicketsPage() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [isFlowDialogOpen, setIsFlowDialogOpen] = useState(false);
-  const [flowData, setFlowData] = useState({
-    status: '',
-    assignee_id: '',
-    comment: ''
-  });
+  const router = useRouter();
   
-  // 创建工单表单
-  const [createFormData, setCreateFormData] = useState({
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // 选中的项目
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // 创建工单对话框
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({
     type: 'bug' as TicketType,
     title: '',
     description: '',
     priority: 'medium' as TicketPriority,
-    assignee_id: ''
+    project_id: ''
   });
 
   useEffect(() => {
-    fetchTickets();
-    fetchAgents();
+    fetchData();
   }, []);
 
-  const fetchTickets = async () => {
+  useEffect(() => {
+    if (selectedProjectId !== null) {
+      fetchTickets(selectedProjectId);
+    }
+  }, [selectedProjectId]);
+
+  const fetchData = async () => {
     try {
-      const response = await fetch('/api/tickets');
+      setLoading(true);
+      
+      const [projectsRes, ticketsRes] = await Promise.all([
+        fetch('/api/projects'),
+        fetch('/api/tickets')
+      ]);
+      
+      const projectsData = await projectsRes.json();
+      const ticketsData = await ticketsRes.json();
+      
+      if (projectsData.success) {
+        setProjects(projectsData.data);
+        // 默认选择第一个项目
+        if (projectsData.data.length > 0 && !selectedProjectId) {
+          setSelectedProjectId('all');
+        }
+      }
+      
+      if (ticketsData.success) {
+        setTickets(ticketsData.data);
+      }
+    } catch (error) {
+      console.error('获取数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTickets = async (projectId: string | null) => {
+    try {
+      const url = projectId && projectId !== 'all' 
+        ? `/api/tickets?project_id=${projectId}`
+        : '/api/tickets';
+      
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
         setTickets(result.data);
       }
     } catch (error) {
-      console.error('获取工单列表失败:', error);
+      console.error('获取工单失败:', error);
     }
   };
 
-  const fetchAgents = async () => {
-    try {
-      // 只获取非模板智能体（项目智能体）
-      const response = await fetch('/api/agents?is_template=false');
-      const result = await response.json();
-      
-      if (result.success) {
-        setAgents(result.data);
-      }
-    } catch (error) {
-      console.error('获取智能体列表失败:', error);
-    }
+  // 选择项目
+  const handleSelectProject = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    fetchTickets(projectId);
   };
 
   // 创建工单
   const handleCreateTicket = async () => {
-    if (!createFormData.title) {
+    if (!createForm.title) {
       alert('请输入工单标题');
       return;
     }
-
-    // 获取负责人名称
-    const assignee = agents.find(a => a.id === createFormData.assignee_id);
-
+    
     try {
+      setCreating(true);
+      
       const response = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...createFormData,
-          assignee_name: assignee?.name
+          ...createForm,
+          project_id: createForm.project_id || (selectedProjectId !== 'all' ? selectedProjectId : undefined)
         })
       });
       
       const result = await response.json();
       
       if (result.success) {
-        setIsCreateDialogOpen(false);
-        setCreateFormData({
+        setCreateDialogOpen(false);
+        setCreateForm({
           type: 'bug',
           title: '',
           description: '',
           priority: 'medium',
-          assignee_id: ''
+          project_id: ''
         });
-        fetchTickets();
+        fetchTickets(selectedProjectId);
       } else {
         alert('创建失败: ' + result.error);
       }
     } catch (error) {
       console.error('创建工单失败:', error);
       alert('创建失败');
+    } finally {
+      setCreating(false);
     }
   };
 
-  const handleFlowTicket = async () => {
-    if (!selectedTicket) return;
-    
-    // 获取负责人名称
-    const assignee = agents.find(a => a.id === flowData.assignee_id);
-    
-    try {
-      const response = await fetch(`/api/tickets/${selectedTicket.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: flowData.status,
-          assignee_id: flowData.assignee_id,
-          assignee_name: assignee?.name,
-          comment: flowData.comment
-        })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setIsFlowDialogOpen(false);
-        fetchTickets();
-        setFlowData({ status: '', assignee_id: '', comment: '' });
-      } else {
-        alert('流转失败: ' + result.error);
-      }
-    } catch (error) {
-      console.error('流转工单失败:', error);
-      alert('流转失败');
-    }
+  // 获取项目名称
+  const getProjectName = (projectId?: string) => {
+    if (!projectId) return '未关联项目';
+    const project = projects.find(p => p.id === projectId);
+    return project?.name || '未知项目';
   };
 
-  const getTypeIcon = (type: string) => {
-    const iconMap: Record<string, any> = {
-      bug: Bug,
-      feature: Lightbulb,
-      improvement: Wrench
-    };
-    return iconMap[type] || TicketIcon;
+  // 过滤工单
+  const filteredTickets = tickets.filter(ticket => {
+    if (!searchQuery) return true;
+    return ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           (ticket.description && ticket.description.toLowerCase().includes(searchQuery.toLowerCase()));
+  });
+
+  // 按状态分组
+  const groupedTickets = {
+    open: filteredTickets.filter(t => t.status === 'open'),
+    in_progress: filteredTickets.filter(t => t.status === 'in_progress'),
+    resolved: filteredTickets.filter(t => t.status === 'resolved'),
+    closed: filteredTickets.filter(t => t.status === 'closed')
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-      open: { label: '待处理', variant: 'secondary' },
-      in_progress: { label: '处理中', variant: 'default' },
-      resolved: { label: '已解决', variant: 'outline' },
-      closed: { label: '已关闭', variant: 'outline' }
-    };
-    const config = statusMap[status] || statusMap.open;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    const priorityMap: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-      low: { label: '低', variant: 'secondary' },
-      medium: { label: '中', variant: 'outline' },
-      high: { label: '高', variant: 'default' },
-      critical: { label: '紧急', variant: 'destructive' }
-    };
-    const config = priorityMap[priority] || priorityMap.medium;
-    return <Badge variant={config.variant}>{config.label}</Badge>;
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container flex h-16 items-center justify-between px-4">
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted">
+      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
+        <div className="flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <TicketIcon className="h-6 w-6" />
-            <h1 className="text-xl font-bold">工单流转</h1>
+            <h1 className="text-xl font-bold">工单管理</h1>
           </div>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            创建工单
+            新建工单
           </Button>
         </div>
       </header>
 
-      <main className="container px-4 py-8">
-        <div className="grid gap-4">
-          {tickets.map((ticket: any) => {
-            const TypeIcon = getTypeIcon(ticket.type);
-            return (
-              <Card key={ticket.id}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <TypeIcon className="h-5 w-5 mt-1 text-muted-foreground" />
-                      <div className="flex-1">
-                        <CardTitle className="text-lg">{ticket.title}</CardTitle>
-                        <CardDescription className="mt-1">
-                          {ticket.description || '暂无描述'}
-                        </CardDescription>
-                      </div>
-                    </div>
+      <div className="flex">
+        {/* 左侧：项目列表 */}
+        <aside className="w-64 border-r bg-background min-h-[calc(100vh-64px)]">
+          <div className="p-4 border-b">
+            <h2 className="font-semibold text-sm text-muted-foreground">项目列表</h2>
+          </div>
+          <ScrollArea className="h-[calc(100vh-128px)]">
+            <div className="p-2">
+              {/* 全部项目 */}
+              <button
+                onClick={() => handleSelectProject('all')}
+                className={`w-full text-left px-3 py-2 rounded-lg mb-1 transition-colors ${
+                  selectedProjectId === 'all' 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'hover:bg-muted'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <TicketIcon className="h-4 w-4" />
+                  <span className="font-medium">全部工单</span>
+                </div>
+                <p className="text-xs mt-1 opacity-70">{tickets.length} 个工单</p>
+              </button>
+              
+              {projects.map(project => {
+                const projectTickets = tickets.filter(t => t.project_id === project.id);
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => handleSelectProject(project.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg mb-1 transition-colors ${
+                      selectedProjectId === project.id 
+                        ? 'bg-primary text-primary-foreground' 
+                        : 'hover:bg-muted'
+                    }`}
+                  >
                     <div className="flex items-center gap-2">
-                      {getStatusBadge(ticket.status)}
-                      {getPriorityBadge(ticket.priority)}
+                      <Folder className="h-4 w-4" />
+                      <span className="font-medium truncate">{project.name}</span>
                     </div>
+                    <p className="text-xs mt-1 opacity-70">{projectTickets.length} 个工单</p>
+                  </button>
+                );
+              })}
+              
+              {projects.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <p className="text-sm">暂无项目</p>
+                  <Link href="/projects" className="text-primary text-xs hover:underline mt-1 inline-block">
+                    创建项目
+                  </Link>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </aside>
+
+        {/* 右侧：工单列表 */}
+        <main className="flex-1 p-6">
+          {/* 搜索栏 */}
+          <div className="mb-6 flex items-center gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索工单..."
+                className="pl-10"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              共 {filteredTickets.length} 个工单
+            </div>
+          </div>
+
+          {/* 统计卡片 */}
+          <div className="grid gap-4 md:grid-cols-4 mb-6">
+            <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => {/* 滚动到待处理 */}}>
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">待处理</p>
+                    <p className="text-2xl font-bold">{groupedTickets.open.length}</p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                      {ticket.assignee && (
-                        <div className="flex items-center gap-1">
-                          <User className="h-3 w-3" />
-                          <span>负责人: {ticket.assignee.name}</span>
-                        </div>
-                      )}
-                      <span>
-                        创建: {new Date(ticket.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <Button 
-                      size="sm" 
-                      variant="outline"
-                      onClick={() => {
-                        setSelectedTicket(ticket);
-                        setFlowData({
-                          status: ticket.status,
-                          assignee_id: ticket.assignee_id || '',
-                          comment: ''
-                        });
-                        setIsFlowDialogOpen(true);
-                      }}
-                    >
-                      <ArrowRight className="h-3 w-3 mr-1" />
-                      流转
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-          
-          {tickets.length === 0 && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <TicketIcon className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground mb-4">暂无工单</p>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  创建第一个工单
-                </Button>
+                  <Clock className="h-8 w-8 text-yellow-500" />
+                </div>
               </CardContent>
             </Card>
-          )}
-        </div>
-      </main>
+            <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">处理中</p>
+                    <p className="text-2xl font-bold">{groupedTickets.in_progress.length}</p>
+                  </div>
+                  <Loader2 className="h-8 w-8 text-blue-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">已解决</p>
+                    <p className="text-2xl font-bold">{groupedTickets.resolved.length}</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="cursor-pointer hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">已关闭</p>
+                    <p className="text-2xl font-bold">{groupedTickets.closed.length}</p>
+                  </div>
+                  <XCircle className="h-8 w-8 text-gray-500" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 工单列表 */}
+          <Tabs defaultValue="open" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="open">待处理 ({groupedTickets.open.length})</TabsTrigger>
+              <TabsTrigger value="in_progress">处理中 ({groupedTickets.in_progress.length})</TabsTrigger>
+              <TabsTrigger value="resolved">已解决 ({groupedTickets.resolved.length})</TabsTrigger>
+              <TabsTrigger value="closed">已关闭 ({groupedTickets.closed.length})</TabsTrigger>
+            </TabsList>
+            
+            {['open', 'in_progress', 'resolved', 'closed'].map(status => (
+              <TabsContent key={status} value={status}>
+                {groupedTickets[status as keyof typeof groupedTickets].length === 0 ? (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <TicketIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">暂无工单</p>
+                      {status === 'open' && (
+                        <Button className="mt-4" onClick={() => setCreateDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          新建工单
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {groupedTickets[status as keyof typeof groupedTickets].map(ticket => {
+                      const typeConfig = TICKET_TYPE_CONFIG[ticket.type as keyof typeof TICKET_TYPE_CONFIG] || TICKET_TYPE_CONFIG.task;
+                      const priorityConfig = PRIORITY_CONFIG[ticket.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.medium;
+                      const statusConfig = STATUS_CONFIG[ticket.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.open;
+                      const TypeIcon = typeConfig.icon;
+                      
+                      return (
+                        <Card 
+                          key={ticket.id} 
+                          className="hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => router.push(`/tickets/${ticket.id}`)}
+                        >
+                          <CardContent className="py-4">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-start gap-4 flex-1">
+                                <TypeIcon className={`h-5 w-5 mt-1 ${typeConfig.color}`} />
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-medium truncate">{ticket.title}</h3>
+                                  {ticket.description && (
+                                    <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
+                                      {ticket.description}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    <Badge variant="outline" className={priorityConfig.color}>
+                                      {priorityConfig.label}
+                                    </Badge>
+                                    {selectedProjectId === 'all' && ticket.project_id && (
+                                      <Badge variant="outline" className="text-xs">
+                                        {getProjectName(ticket.project_id)}
+                                      </Badge>
+                                    )}
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(ticket.created_at).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                {ticket.status === 'open' && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(`/tickets/${ticket.id}`);
+                                    }}
+                                  >
+                                    <Play className="h-4 w-4 mr-1" />
+                                    处理
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </TabsContent>
+            ))}
+          </Tabs>
+        </main>
+      </div>
 
       {/* 创建工单对话框 */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-md">
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>创建工单</DialogTitle>
+            <DialogTitle>新建工单</DialogTitle>
             <DialogDescription>
-              创建新的Bug单或工单
+              创建新的工单
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4 mt-4">
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>工单类型</Label>
+                <Select 
+                  value={createForm.type} 
+                  onValueChange={(value) => setCreateForm({ ...createForm, type: value as TicketType })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bug">
+                      <div className="flex items-center gap-2">
+                        <Bug className="h-4 w-4 text-red-500" />
+                        Bug 修复
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="feature">
+                      <div className="flex items-center gap-2">
+                        <Lightbulb className="h-4 w-4 text-blue-500" />
+                        新需求
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="improvement">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-green-500" />
+                        改进优化
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="task">
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="h-4 w-4 text-gray-500" />
+                        通用任务
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>优先级</Label>
+                <Select 
+                  value={createForm.priority} 
+                  onValueChange={(value) => setCreateForm({ ...createForm, priority: value as TicketPriority })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低</SelectItem>
+                    <SelectItem value="medium">中</SelectItem>
+                    <SelectItem value="high">高</SelectItem>
+                    <SelectItem value="critical">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
             <div className="space-y-2">
-              <Label>工单类型 *</Label>
+              <Label>所属项目</Label>
               <Select 
-                value={createFormData.type} 
-                onValueChange={(value: TicketType) => setCreateFormData({ ...createFormData, type: value })}
+                value={createForm.project_id || (selectedProjectId !== 'all' ? selectedProjectId || '' : '')}
+                onValueChange={(value) => setCreateForm({ ...createForm, project_id: value })}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="选择项目" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="bug">
-                    <div className="flex items-center gap-2">
-                      <Bug className="h-4 w-4" />
-                      Bug修复
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="feature">
-                    <div className="flex items-center gap-2">
-                      <Lightbulb className="h-4 w-4" />
-                      新功能
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="improvement">
-                    <div className="flex items-center gap-2">
-                      <Wrench className="h-4 w-4" />
-                      改进优化
-                    </div>
-                  </SelectItem>
+                  {projects.map(project => (
+                    <SelectItem key={project.id} value={project.id}>
+                      <div className="flex items-center gap-2">
+                        <Folder className="h-4 w-4" />
+                        <span>{project.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             
             <div className="space-y-2">
-              <Label>标题 *</Label>
+              <Label>工单标题 *</Label>
               <Input
-                value={createFormData.title}
-                onChange={(e) => setCreateFormData({ ...createFormData, title: e.target.value })}
-                placeholder="输入工单标题"
+                value={createForm.title}
+                onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                placeholder="例如：修复登录页面样式问题"
               />
             </div>
             
             <div className="space-y-2">
-              <Label>描述</Label>
+              <Label>详细描述</Label>
               <Textarea
-                value={createFormData.description}
-                onChange={(e) => setCreateFormData({ ...createFormData, description: e.target.value })}
-                placeholder="详细描述问题或需求"
+                value={createForm.description}
+                onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}
+                placeholder="描述具体需求或问题..."
                 rows={4}
               />
             </div>
-            
-            <div className="space-y-2">
-              <Label>优先级</Label>
-              <Select 
-                value={createFormData.priority} 
-                onValueChange={(value: TicketPriority) => setCreateFormData({ ...createFormData, priority: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">低</SelectItem>
-                  <SelectItem value="medium">中</SelectItem>
-                  <SelectItem value="high">高</SelectItem>
-                  <SelectItem value="critical">紧急</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>指派给</Label>
-              <Select 
-                value={createFormData.assignee_id} 
-                onValueChange={(value) => setCreateFormData({ ...createFormData, assignee_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择负责人" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map(agent => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} ({agent.role})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
               取消
             </Button>
-            <Button onClick={handleCreateTicket}>
-              创建工单
+            <Button onClick={handleCreateTicket} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  创建中...
+                </>
+              ) : (
+                '创建工单'
+              )}
             </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* 流转对话框 */}
-      <Dialog open={isFlowDialogOpen} onOpenChange={setIsFlowDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>工单流转</DialogTitle>
-            <DialogDescription>
-              更新工单状态和负责人
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 mt-4">
-            <div className="space-y-2">
-              <Label>状态</Label>
-              <Select 
-                value={flowData.status} 
-                onValueChange={(value) => setFlowData({ ...flowData, status: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择状态" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="open">待处理</SelectItem>
-                  <SelectItem value="in_progress">处理中</SelectItem>
-                  <SelectItem value="resolved">已解决</SelectItem>
-                  <SelectItem value="closed">已关闭</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>负责人</Label>
-              <Select 
-                value={flowData.assignee_id} 
-                onValueChange={(value) => setFlowData({ ...flowData, assignee_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择负责人" />
-                </SelectTrigger>
-                <SelectContent>
-                  {agents.map(agent => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name} ({agent.role})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="space-y-2">
-              <Label>备注</Label>
-              <Textarea
-                value={flowData.comment}
-                onChange={(e) => setFlowData({ ...flowData, comment: e.target.value })}
-                placeholder="流转说明"
-                rows={3}
-              />
-            </div>
-          </div>
-          
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setIsFlowDialogOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleFlowTicket}>
-              确认流转
-            </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

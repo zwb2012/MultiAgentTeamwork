@@ -28,6 +28,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -46,7 +47,10 @@ import {
   XCircle,
   Clock,
   GitBranch,
-  Settings
+  Settings,
+  User,
+  Bot,
+  ExternalLink
 } from 'lucide-react';
 import type { Project, DefaultPipelines } from '@/types/project';
 import type { Pipeline, TicketType, PipelineRunStatus } from '@/types/pipeline';
@@ -76,6 +80,16 @@ const STATUS_CONFIG = {
   closed: { label: '已关闭', color: 'bg-gray-100 text-gray-500' }
 };
 
+// 运行状态配置
+const RUN_STATUS_CONFIG: Record<string, { label: string; color: string; icon: typeof Clock }> = {
+  idle: { label: '空闲', color: 'text-gray-500', icon: Clock },
+  pending: { label: '等待执行', color: 'text-yellow-500', icon: Clock },
+  running: { label: '执行中', color: 'text-blue-500', icon: Loader2 },
+  success: { label: '执行成功', color: 'text-green-500', icon: CheckCircle },
+  failed: { label: '执行失败', color: 'text-red-500', icon: XCircle },
+  cancelled: { label: '已取消', color: 'text-gray-500', icon: XCircle }
+};
+
 interface Ticket {
   id: string;
   title: string;
@@ -85,9 +99,16 @@ interface Ticket {
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   project_id?: string;
   assignee_id?: string;
+  assignee_name?: string;
   created_at: string;
   pipeline_run_id?: string;
   pipeline_run_status?: PipelineRunStatus;
+}
+
+interface Agent {
+  id: string;
+  name: string;
+  role?: string;
 }
 
 export default function ProjectTicketsPage() {
@@ -98,6 +119,7 @@ export default function ProjectTicketsPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   
   // 创建工单对话框
@@ -115,6 +137,17 @@ export default function ProjectTicketsPage() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>('');
   const [executing, setExecuting] = useState(false);
+  
+  // 流转对话框
+  const [flowDialogOpen, setFlowDialogOpen] = useState(false);
+  const [flowMode, setFlowMode] = useState<'status' | 'agent' | 'pipeline'>('status');
+  const [flowing, setFlowing] = useState(false);
+  const [flowData, setFlowData] = useState({
+    status: '',
+    assignee_id: '',
+    pipeline_id: '',
+    comment: ''
+  });
 
   useEffect(() => {
     fetchData();
@@ -124,16 +157,18 @@ export default function ProjectTicketsPage() {
     try {
       setLoading(true);
       
-      // 并行获取项目、工单、流水线
-      const [projectRes, ticketsRes, pipelinesRes] = await Promise.all([
+      // 并行获取项目、工单、流水线、智能体
+      const [projectRes, ticketsRes, pipelinesRes, agentsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/tickets?project_id=${projectId}`),
-        fetch('/api/pipelines')
+        fetch('/api/pipelines'),
+        fetch('/api/agents?is_template=false')
       ]);
       
       const projectData = await projectRes.json();
       const ticketsData = await ticketsRes.json();
       const pipelinesData = await pipelinesRes.json();
+      const agentsData = await agentsRes.json();
       
       if (projectData.success) {
         setProject(projectData.data);
@@ -150,6 +185,10 @@ export default function ProjectTicketsPage() {
       if (pipelinesData.success) {
         // 只显示已发布的流水线
         setPipelines(pipelinesData.data.filter((p: Pipeline) => p.status === 'published'));
+      }
+      
+      if (agentsData.success) {
+        setAgents(agentsData.data);
       }
     } catch (error) {
       console.error('获取数据失败:', error);
@@ -208,6 +247,19 @@ export default function ProjectTicketsPage() {
     setExecuteDialogOpen(true);
   };
 
+  // 打开流转对话框
+  const openFlowDialog = (ticket: Ticket, mode: 'status' | 'agent' | 'pipeline') => {
+    setSelectedTicket(ticket);
+    setFlowMode(mode);
+    setFlowData({
+      status: ticket.status,
+      assignee_id: ticket.assignee_id || '',
+      pipeline_id: getRecommendedPipelineId(ticket.type) || '',
+      comment: ''
+    });
+    setFlowDialogOpen(true);
+  };
+
   // 获取推荐的流水线ID
   const getRecommendedPipelineId = (ticketType: TicketType): string | null => {
     if (!project?.default_pipelines) return null;
@@ -245,7 +297,12 @@ export default function ProjectTicketsPage() {
       if (result.success) {
         setExecuteDialogOpen(false);
         fetchData();
-        alert('流水线已开始执行');
+        // 跳转到执行详情页
+        if (result.data?.run_id) {
+          router.push(`/pipelines/run/${result.data.run_id}`);
+        } else {
+          alert('流水线已开始执行');
+        }
       } else {
         alert('执行失败: ' + result.error);
       }
@@ -254,6 +311,73 @@ export default function ProjectTicketsPage() {
       alert('执行失败');
     } finally {
       setExecuting(false);
+    }
+  };
+
+  // 执行流转
+  const handleFlow = async () => {
+    if (!selectedTicket) return;
+    
+    try {
+      setFlowing(true);
+      
+      if (flowMode === 'pipeline' && flowData.pipeline_id) {
+        // 驱动流水线执行
+        const response = await fetch(`/api/pipelines/${flowData.pipeline_id}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ticket: {
+              id: selectedTicket.id,
+              type: selectedTicket.type,
+              title: selectedTicket.title,
+              description: selectedTicket.description || '',
+              priority: selectedTicket.priority
+            }
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          setFlowDialogOpen(false);
+          fetchData();
+          if (result.data?.run_id) {
+            router.push(`/pipelines/run/${result.data.run_id}`);
+          } else {
+            alert('流水线已开始执行');
+          }
+        } else {
+          alert('执行失败: ' + result.error);
+        }
+      } else {
+        // 普通流转
+        const response = await fetch(`/api/tickets/${selectedTicket.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: flowData.status || selectedTicket.status,
+            assignee_id: flowData.assignee_id || undefined,
+            assignee_name: agents.find(a => a.id === flowData.assignee_id)?.name,
+            comment: flowData.comment
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          setFlowDialogOpen(false);
+          fetchData();
+          alert('流转成功');
+        } else {
+          alert('流转失败: ' + result.error);
+        }
+      }
+    } catch (error) {
+      console.error('流转失败:', error);
+      alert('流转失败');
+    } finally {
+      setFlowing(false);
     }
   };
 
@@ -310,7 +434,7 @@ export default function ProjectTicketsPage() {
       <main className="container px-4 py-6">
         {/* 统计卡片 */}
         <div className="grid gap-4 md:grid-cols-4 mb-6">
-          <Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -321,7 +445,7 @@ export default function ProjectTicketsPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -332,7 +456,7 @@ export default function ProjectTicketsPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -343,7 +467,7 @@ export default function ProjectTicketsPage() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -392,53 +516,119 @@ export default function ProjectTicketsPage() {
                       <Card key={ticket.id} className="hover:shadow-md transition-shadow">
                         <CardContent className="py-4">
                           <div className="flex items-start justify-between">
-                            <div className="flex items-start gap-4">
+                            <div 
+                              className="flex items-start gap-4 flex-1 cursor-pointer"
+                              onClick={() => router.push(`/tickets/${ticket.id}`)}
+                            >
                               <TypeIcon className={`h-5 w-5 mt-1 ${typeConfig.color}`} />
-                              <div>
+                              <div className="flex-1">
                                 <h3 className="font-medium">{ticket.title}</h3>
                                 {ticket.description && (
                                   <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                                     {ticket.description}
                                   </p>
                                 )}
-                                <div className="flex items-center gap-2 mt-2">
+                                <div className="flex items-center gap-2 mt-2 flex-wrap">
                                   <Badge variant="outline" className={priorityConfig.color}>
                                     {priorityConfig.label}
                                   </Badge>
                                   <Badge variant="outline" className={statusConfig.color}>
                                     {statusConfig.label}
                                   </Badge>
+                                  {ticket.assignee_name && (
+                                    <Badge variant="outline" className="text-xs">
+                                      <User className="h-3 w-3 mr-1" />
+                                      {ticket.assignee_name}
+                                    </Badge>
+                                  )}
                                   <span className="text-xs text-muted-foreground">
                                     {new Date(ticket.created_at).toLocaleDateString()}
                                   </span>
                                 </div>
+                                
+                                {/* 执行状态 */}
+                                {ticket.pipeline_run_id && ticket.pipeline_run_status && (
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <GitBranch className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">
+                                      流水线: {ticket.pipeline_run_id.substring(0, 8)}...
+                                    </span>
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`text-xs ${
+                                        ticket.pipeline_run_status === 'success' ? 'text-green-600' :
+                                        ticket.pipeline_run_status === 'failed' ? 'text-red-600' :
+                                        ticket.pipeline_run_status === 'running' ? 'text-blue-600' : ''
+                                      }`}
+                                    >
+                                      {RUN_STATUS_CONFIG[ticket.pipeline_run_status]?.label || ticket.pipeline_run_status}
+                                    </Badge>
+                                    <Link 
+                                      href={`/pipelines/run/${ticket.pipeline_run_id}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Button variant="ghost" size="sm" className="h-6 px-2">
+                                        <ExternalLink className="h-3 w-3" />
+                                      </Button>
+                                    </Link>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             
                             <div className="flex items-center gap-2">
-                              {ticket.status === 'open' && pipelines.length > 0 && (
+                              {ticket.status === 'open' && (
+                                <>
+                                  {pipelines.length > 0 && (
+                                    <Button 
+                                      size="sm" 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openExecuteDialog(ticket);
+                                      }}
+                                    >
+                                      <Play className="h-4 w-4 mr-1" />
+                                      执行流程
+                                    </Button>
+                                  )}
+                                </>
+                              )}
+                              
+                              {ticket.status === 'in_progress' && (
                                 <Button 
                                   size="sm" 
-                                  onClick={() => openExecuteDialog(ticket)}
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openFlowDialog(ticket, 'status');
+                                  }}
                                 >
-                                  <Play className="h-4 w-4 mr-1" />
-                                  执行流程
+                                  更新状态
                                 </Button>
                               )}
                               
                               <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
+                                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                   <Button variant="ghost" size="sm">
                                     <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => router.push(`/tickets/${ticket.id}`)}>
                                     查看详情
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    编辑
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'status')}>
+                                    更新状态
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'agent')}>
+                                    分配负责人
+                                  </DropdownMenuItem>
+                                  {pipelines.length > 0 && (
+                                    <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'pipeline')}>
+                                      执行流水线
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
@@ -623,6 +813,143 @@ export default function ProjectTicketsPage() {
                 <>
                   <Play className="h-4 w-4 mr-2" />
                   开始执行
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 流转对话框 */}
+      <Dialog open={flowDialogOpen} onOpenChange={setFlowDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              {flowMode === 'status' ? '更新状态' : 
+               flowMode === 'agent' ? '分配负责人' : 
+               '执行流水线'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTicket?.title}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {flowMode === 'status' && (
+              <div className="space-y-2">
+                <Label>新状态</Label>
+                <Select 
+                  value={flowData.status} 
+                  onValueChange={(value) => setFlowData({ ...flowData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">待处理</SelectItem>
+                    <SelectItem value="in_progress">处理中</SelectItem>
+                    <SelectItem value="resolved">已解决</SelectItem>
+                    <SelectItem value="closed">已关闭</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            {flowMode === 'agent' && (
+              <div className="space-y-2">
+                <Label>选择负责人</Label>
+                <Select 
+                  value={flowData.assignee_id} 
+                  onValueChange={(value) => setFlowData({ ...flowData, assignee_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择智能体" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {agents.map(agent => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <div className="flex items-center gap-2">
+                          <Bot className="h-4 w-4" />
+                          <span>{agent.name}</span>
+                          {agent.role && (
+                            <span className="text-muted-foreground">({agent.role})</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {agents.length === 0 && (
+                  <p className="text-sm text-muted-foreground">暂无可用智能体</p>
+                )}
+              </div>
+            )}
+            
+            {flowMode === 'pipeline' && (
+              <div className="space-y-2">
+                <Label>选择流水线</Label>
+                <Select 
+                  value={flowData.pipeline_id} 
+                  onValueChange={(value) => setFlowData({ ...flowData, pipeline_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="选择流水线" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {pipelines.map(pipeline => (
+                      <SelectItem key={pipeline.id} value={pipeline.id}>
+                        <div className="flex items-center gap-2">
+                          <GitBranch className="h-4 w-4" />
+                          <span>{pipeline.name}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {flowData.pipeline_id && (
+                  <p className="text-sm text-muted-foreground">
+                    {pipelines.find(p => p.id === flowData.pipeline_id)?.description || '暂无描述'}
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {flowMode !== 'pipeline' && (
+              <div className="space-y-2">
+                <Label>备注</Label>
+                <Textarea
+                  value={flowData.comment}
+                  onChange={(e) => setFlowData({ ...flowData, comment: e.target.value })}
+                  placeholder="流转说明..."
+                  rows={3}
+                />
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFlowDialogOpen(false)}>
+              取消
+            </Button>
+            <Button 
+              onClick={handleFlow} 
+              disabled={flowing || (flowMode === 'pipeline' && !flowData.pipeline_id)}
+            >
+              {flowing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  处理中...
+                </>
+              ) : (
+                <>
+                  {flowMode === 'pipeline' ? (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      开始执行
+                    </>
+                  ) : (
+                    '确认'
+                  )}
                 </>
               )}
             </Button>
