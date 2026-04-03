@@ -29,7 +29,11 @@ export class PipelineEngine {
   /**
    * 运行流水线
    */
-  async run(pipelineId: string, triggerBy: string = 'manual'): Promise<PipelineRun> {
+  async run(
+    pipelineId: string,
+    triggerBy: string = 'manual',
+    ticket?: any
+  ): Promise<PipelineRun> {
     // 1. 获取流水线详情
     const pipeline = await this.getPipeline(pipelineId);
     if (!pipeline) {
@@ -40,20 +44,21 @@ export class PipelineEngine {
       throw new Error(`流水线状态为 ${pipeline.status}，无法执行`);
     }
     
-    // 2. 创建群组会话
-    const conversation = await this.createPipelineConversation(pipeline);
+    // 2. 创建群组会话（绑定到项目）
+    const conversation = await this.createPipelineConversation(pipeline, ticket);
     
     // 3. 创建运行记录
-    const run = await this.createRun(pipeline, conversation.id, triggerBy);
+    const run = await this.createRun(pipeline, conversation.id, triggerBy, ticket);
     
     // 4. 初始化节点运行状态
     await this.initializeNodeRuns(run.id, pipeline.nodes || []);
     
     // 5. 发送开始消息
-    await this.sendSystemMessage(
-      conversation.id,
-      `🚀 流水线 "${pipeline.name}" 开始执行，共 ${pipeline.nodes?.length || 0} 个节点`
-    );
+    let startMessage = `🚀 流水线 "${pipeline.name}" 开始执行，共 ${pipeline.nodes?.length || 0} 个节点`;
+    if (ticket) {
+      startMessage += `\n\n📋 工单信息:\n- 标题: ${ticket.ticket_title}\n- 类型: ${ticket.ticket_type}\n- 优先级: ${ticket.ticket_priority}`;
+    }
+    await this.sendSystemMessage(conversation.id, startMessage);
     
     // 6. 异步执行流水线
     this.executeAsync(run.id, pipeline, conversation.id).catch(error => {
@@ -89,8 +94,12 @@ export class PipelineEngine {
   
   /**
    * 创建流水线群组会话
+   * 优先创建项目会话，如果流水线有 project_id，则创建绑定项目的会话
    */
-  private async createPipelineConversation(pipeline: Pipeline): Promise<Conversation> {
+  private async createPipelineConversation(
+    pipeline: Pipeline,
+    ticket?: any
+  ): Promise<Conversation> {
     // 提取所有参与的智能体
     const agentIds = new Set<string>();
     for (const node of pipeline.nodes || []) {
@@ -99,13 +108,21 @@ export class PipelineEngine {
       }
     }
     
+    // 如果有工单信息，使用工单标题作为会话标题
+    const conversationTitle = ticket?.ticket_title
+      ? `工单: ${ticket.ticket_title}`
+      : `${pipeline.name} - 流水线执行`;
+
+    // 创建会话 - 绑定到项目（如果流水线有 project_id）
     const { data, error } = await this.client
       .from('conversations')
       .insert({
-        title: `流水线: ${pipeline.name}`,
-        type: 'pipeline',
+        title: conversationTitle,
+        type: 'group', // 使用 group 类型，表示这是一个项目会话
+        project_id: pipeline.project_id || null, // 绑定到项目
         config: {
           pipeline_id: pipeline.id,
+          ticket_id: ticket?.ticket_id || null,
           auto_notify: true
         },
         status: 'active'
@@ -136,20 +153,34 @@ export class PipelineEngine {
    * 创建运行记录
    */
   private async createRun(
-    pipeline: Pipeline, 
-    conversationId: string, 
-    triggerBy: string
+    pipeline: Pipeline,
+    conversationId: string,
+    triggerBy: string,
+    ticket?: any
   ): Promise<PipelineRun> {
+    const runData: any = {
+      pipeline_id: pipeline.id,
+      conversation_id: conversationId,
+      status: 'running',
+      trigger_by: triggerBy,
+      total_nodes: pipeline.nodes?.length || 0,
+      started_at: new Date().toISOString()
+    };
+    
+    // 如果有工单信息，保存到 input_data 中
+    if (ticket) {
+      runData.input_data = {
+        ticket_id: ticket.ticket_id,
+        ticket_type: ticket.ticket_type,
+        ticket_title: ticket.ticket_title,
+        ticket_description: ticket.ticket_description,
+        ticket_priority: ticket.ticket_priority
+      };
+    }
+    
     const { data, error } = await this.client
       .from('pipeline_runs')
-      .insert({
-        pipeline_id: pipeline.id,
-        conversation_id: conversationId,
-        status: 'running',
-        trigger_by: triggerBy,
-        total_nodes: pipeline.nodes?.length || 0,
-        started_at: new Date().toISOString()
-      })
+      .insert(runData)
       .select()
       .single();
     

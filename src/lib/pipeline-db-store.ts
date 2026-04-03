@@ -388,26 +388,18 @@ export async function runPipeline(id: string, ticket?: TicketInput): Promise<Pip
     throw new Error('流水线正在运行中，请等待执行完成');
   }
 
-  // 使用 PipelineEngine 执行流水线
+  // 构建工单对象
+  const ticketData = ticket ? {
+    ticket_id: ticket.id,
+    ticket_type: ticket.type,
+    ticket_title: ticket.title,
+    ticket_description: ticket.description,
+    ticket_priority: ticket.priority
+  } : undefined;
+
+  // 使用 PipelineEngine 执行流水线，传递工单信息
   const engine = new PipelineEngine();
-  const run = await engine.run(id, 'manual');
-  
-  // 如果有工单信息，更新运行记录
-  if (ticket) {
-    const client = getSupabaseClient();
-    await client
-      .from('pipeline_runs')
-      .update({
-        input_data: {
-          ticket_id: ticket.id,
-          ticket_type: ticket.type,
-          ticket_title: ticket.title,
-          ticket_description: ticket.description,
-          ticket_priority: ticket.priority
-        }
-      })
-      .eq('id', run.id);
-  }
+  const run = await engine.run(id, 'manual', ticketData);
   
   return run;
 }
