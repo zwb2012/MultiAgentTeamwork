@@ -39,7 +39,10 @@ import {
   XCircle,
   Clock,
   Play,
-  Search
+  Search,
+  Trash2,
+  Edit,
+  MoreVertical
 } from 'lucide-react';
 import type { Ticket, TicketType, TicketPriority } from '@/types/agent';
 import type { Project } from '@/types/project';
@@ -90,6 +93,11 @@ export default function TicketsPage() {
     priority: 'medium' as TicketPriority,
     project_id: ''
   });
+
+  // 删除工单对话框
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -195,6 +203,35 @@ export default function TicketsPage() {
       alert('创建失败');
     } finally {
       setCreating(false);
+    }
+  };
+
+  // 删除工单
+  const handleDeleteTicket = async () => {
+    if (!deletingTicketId) return;
+    
+    try {
+      setDeleting(true);
+      
+      const response = await fetch(`/api/tickets/${deletingTicketId}`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setDeleteDialogOpen(false);
+        setDeletingTicketId(null);
+        // 刷新所有工单列表
+        fetchData();
+      } else {
+        alert('删除失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('删除工单失败:', error);
+      alert('删除失败');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -445,6 +482,17 @@ export default function TicketsPage() {
                                     处理
                                   </Button>
                                 )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeletingTicketId(ticket.id);
+                                    setDeleteDialogOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
                           </CardContent>
@@ -582,6 +630,33 @@ export default function TicketsPage() {
                 </>
               ) : (
                 '创建工单'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 删除确认对话框 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+            <DialogDescription>
+              删除后无法恢复，确定要删除这个工单吗？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteTicket} disabled={deleting}>
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                '确认删除'
               )}
             </Button>
           </DialogFooter>
