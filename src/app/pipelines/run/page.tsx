@@ -9,7 +9,8 @@ import {
   Loader2, 
   Clock,
   ArrowRight,
-  Play
+  Play,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,14 +119,24 @@ export default function PipelineRunsPage() {
 
   return (
     <div className="container mx-auto py-6 space-y-6">
+      {/* 面包屑导航 */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+        <Link href="/pipelines/manage" className="hover:text-foreground">
+          编排
+        </Link>
+        <ArrowRight className="h-4 w-4" />
+        <span className="text-foreground">监控</span>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">流水线运行记录</h1>
+          <h1 className="text-2xl font-bold">运行监控</h1>
           <p className="text-muted-foreground">
             查看所有项目的流水线执行情况
           </p>
         </div>
         <Button variant="outline" onClick={fetchRuns}>
+          <RefreshCw className="h-4 w-4 mr-2" />
           刷新
         </Button>
       </div>

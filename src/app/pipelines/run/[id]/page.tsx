@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft,
+  ArrowRight,
   GitBranch,
   Loader2,
   CheckCircle,
@@ -177,7 +178,7 @@ export default function PipelineRunDetailPage() {
         setData(result.data);
       } else {
         alert('运行记录不存在');
-        router.push('/pipelines');
+        router.push('/pipelines/run');
       }
     } catch (error) {
       console.error('获取运行详情失败:', error);
@@ -237,8 +238,8 @@ export default function PipelineRunDetailPage() {
     return (
       <div className="container mx-auto py-6 text-center">
         <p>运行记录不存在</p>
-        <Link href="/pipelines">
-          <Button className="mt-4">返回流水线列表</Button>
+        <Link href="/pipelines/run">
+          <Button className="mt-4">返回运行记录</Button>
         </Link>
       </div>
     );
@@ -249,11 +250,26 @@ export default function PipelineRunDetailPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted">
+      {/* 面包屑导航 */}
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container flex h-12 items-center px-4 gap-2 text-sm text-muted-foreground">
+          <Link href="/pipelines/manage" className="hover:text-foreground">
+            编排
+          </Link>
+          <ArrowRight className="h-3 w-3" />
+          <Link href="/pipelines/run" className="hover:text-foreground">
+            监控
+          </Link>
+          <ArrowRight className="h-3 w-3" />
+          <span className="text-foreground">运行详情</span>
+        </div>
+      </div>
+
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" asChild>
-              <Link href="/pipelines">
+              <Link href="/pipelines/run">
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
