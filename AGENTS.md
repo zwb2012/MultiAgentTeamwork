@@ -177,6 +177,7 @@
   - 技能执行引擎：`src/lib/skills/executor.ts` 负责技能路由和执行
   - 智能体配置：通过 `agent_skills` 表为每个智能体配置启用哪些技能
   - 技能增强聊天：`src/lib/skills/enhanced-chat.ts` 提供集成技能的对话能力
+  - 技能调用解析：`src/lib/skills/parser.ts` 提供优化的技能调用识别
 - **技能类别**：
   - 代码开发：代码生成、文件操作、命令执行
   - 文本处理：文案编写、文本生成
@@ -185,7 +186,11 @@
   - 集成能力：API调用、第三方集成
 - **注意事项**：
   - 技能执行器在服务端运行，避免客户端导入node模块
-  - 技能调用通过LLM文本识别实现，兼容不支持Function Calling的SDK
+  - 技能调用通过LLM JSON输出识别，精确度高
   - 所有技能执行记录到 `skill_executions` 表，便于统计和调试
+- **前端页面**：
+  - `/skills` - 技能管理页面：查看所有技能和分类
+  - `/skills/stats` - 技能统计页面：查看使用统计和执行日志
+  - `/agents/[id]/skills` - 智能体技能配置：为智能体配置技能
 
 

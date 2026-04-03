@@ -7,6 +7,7 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { LLMClient, Config, HeaderUtils } from 'coze-coding-dev-sdk';
 import { SkillExecutor, getAgentSkills } from './executor';
 import { skillRegistry } from './registry';
+import { detectSkillCall, generateSkillSummary } from './parser';
 import type { ProjectContext } from '@/types/skill';
 
 /**
@@ -297,55 +298,67 @@ export class SkillEnhancedChat {
             }
           }
 
-          // 检查是否需要调用技能
-          const skillCall = this.detectSkillCall(llmResponse, agentSkills);
+          // 检查是否需要调用技能（使用优化的解析器）
+          const lastUserMessage = messages[messages.length - 1]?.content || '';
+          const skillDetection = await detectSkillCall(lastUserMessage, agentSkills, this.llmClient);
 
-          if (skillCall) {
-            // 发送技能调用通知
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: 'skill_call',
-                  skill_name: skillCall.skill.name,
-                  skill_id: skillCall.skill.id
-                })}\n\n`
-              )
-            );
+          if (skillDetection.has_call && skillDetection.call) {
+            const skillCall = skillDetection.call;
+            const skill = agentSkills.find((s: any) => s.id === skillCall.skill_id);
 
-            // 执行技能
-            const skillResult = await this.skillExecutor.executeSkill(
-              skillCall.skill.id,
-              skillCall.params
-            );
+            if (skill) {
+              // 发送技能调用通知
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'skill_call',
+                    skill_name: skill.name,
+                    skill_id: skill.id,
+                    reasoning: skillCall.reasoning
+                  })}\n\n`
+                )
+              );
 
-            // 发送技能结果
-            controller.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({
-                  type: 'skill_result',
-                  success: skillResult.success,
-                  result: skillResult.data,
-                  error: skillResult.error
-                })}\n\n`
-              )
-            );
+              // 执行技能
+              const skillResult = await this.skillExecutor.executeSkill(
+                skill.id,
+                skillCall.params
+              );
 
-            // 如果技能成功，让LLM基于结果生成补充说明
-            if (skillResult.success && skillResult.data) {
-              const followUpMessages = [
-                ...messages,
-                { role: 'assistant', content: llmResponse },
-                {
-                  role: 'system',
-                  content: `技能【${skillCall.skill.name}】已执行完成，结果如下：\n${JSON.stringify(
-                    skillResult.data,
-                    null,
-                    2
-                  )}\n\n请基于以上结果，为用户提供更详细的说明或后续操作建议。`
+              // 发送技能结果
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'skill_result',
+                    success: skillResult.success,
+                    result: skillResult.data,
+                    error: skillResult.error
+                  })}\n\n`
+                )
+              );
+
+              // 生成技能执行总结
+              if (skillResult.success && skillResult.data) {
+                const summary = await generateSkillSummary(
+                  lastUserMessage,
+                  skill.name,
+                  skillResult.data,
+                  this.llmClient
+                );
+
+                // 流式输出总结
+                for (const char of summary) {
+                  fullResponse += char;
+                  const data = JSON.stringify({
+                    content: char,
+                    agent_id: targetAgent.id,
+                    agent_name: targetAgent.name
+                  });
+                  controller.enqueue(encoder.encode(`data: ${data}\n\n`));
                 }
-              ];
-
-              const followUpStream = this.llmClient.stream(followUpMessages, {
+              }
+            }
+          }
                 model: targetAgent.model || 'doubao-seed-1-8-251228',
                 temperature: 0.7,
                 thinking: 'disabled',
@@ -366,8 +379,6 @@ export class SkillEnhancedChat {
                 }
               }
             }
-          }
-
           // 保存AI回复
           await this.saveMessage(
             conversation_id,
@@ -398,40 +409,5 @@ export class SkillEnhancedChat {
         }
       }
     });
-  }
-
-  /**
-   * 检测LLM回复中的技能调用
-   */
-  private detectSkillCall(
-    llmResponse: string,
-    agentSkills: any[]
-  ): { skill: any; params: any } | null {
-    // 简单的实现：查找特定的技能调用标记
-    // 实际中可以使用更复杂的解析逻辑
-
-    for (const skill of agentSkills) {
-      const functionName = skill.capabilities.function_definition.name;
-      const functionNameRegex = new RegExp(`调用\\s*${functionName}\\s*[:：]`, 'i');
-      const skillNameRegex = new RegExp(`调用\\s*${skill.name}\\s*[:：]`, 'i');
-
-      if (functionNameRegex.test(llmResponse) || skillNameRegex.test(llmResponse)) {
-        // 尝试提取参数
-        const paramsMatch = llmResponse.match(/参数[:：]\s*\{([\s\S]*?)\}/);
-        let params = {};
-
-        if (paramsMatch) {
-          try {
-            params = JSON.parse(`{${paramsMatch[1]}}`);
-          } catch (e) {
-            console.error('解析技能参数失败:', e);
-          }
-        }
-
-        return { skill, params };
-      }
-    }
-
-    return null;
   }
 }

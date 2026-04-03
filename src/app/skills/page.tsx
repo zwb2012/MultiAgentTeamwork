@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Code, PenTool, Search, Palette, Link2 } from 'lucide-react';
+import { Loader2, Code, PenTool, Search, Palette, Link2, BarChart3 } from 'lucide-react';
 
 interface Skill {
   id: string;
@@ -111,6 +113,12 @@ export default function SkillsPage() {
             为LLM智能体配备各种专业能力，通过Function Calling让智能体主动调用工具
           </p>
         </div>
+        <Link href="/skills/stats">
+          <Button variant="outline">
+            <BarChart3 className="w-4 h-4 mr-2" />
+            统计监控
+          </Button>
+        </Link>
       </div>
 
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="w-full">
