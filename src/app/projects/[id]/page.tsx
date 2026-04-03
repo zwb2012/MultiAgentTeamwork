@@ -189,22 +189,10 @@ export default function EditProjectPage() {
             )}
           </div>
         </div>
-        
+
         <div className="flex gap-2">
-          <Link href={`/projects/${projectId}/tickets`}>
-            <Button variant="outline">
-              <Ticket className="h-4 w-4 mr-2" />
-              工单管理
-            </Button>
-          </Link>
-          <Link href={`/projects/${projectId}/pipelines`}>
-            <Button variant="outline">
-              <GitBranch className="h-4 w-4 mr-2" />
-              流水线
-            </Button>
-          </Link>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleSync}
             disabled={syncing || project?.sync_status === 'syncing'}
           >

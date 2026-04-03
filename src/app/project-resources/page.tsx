@@ -107,10 +107,22 @@ export default function ProjectResourcesPage() {
   // 创建表单
   const [newAgent, setNewAgent] = useState({ name: '', role: 'developer', system_prompt: '' });
   const [newConversation, setNewConversation] = useState({ title: '', type: 'private', selectedAgents: [] as string[] });
-  
+
   const [submitting, setSubmitting] = useState(false);
   const [newPipeline, setNewPipeline] = useState({ name: '', description: '' });
   const [newTicket, setNewTicket] = useState({ title: '', description: '', type: 'feature', priority: 'medium' });
+
+  // 编辑工单状态
+  const [showEditTicket, setShowEditTicket] = useState(false);
+  const [editingTicket, setEditingTicket] = useState<any>(null);
+  const [editing, setEditing] = useState(false);
+  const [editTicket, setEditTicket] = useState({
+    title: '',
+    description: '',
+    type: 'feature',
+    priority: 'medium',
+    status: 'open'
+  });
 
   useEffect(() => {
     fetchProjects();
@@ -416,6 +428,50 @@ export default function ProjectResourcesPage() {
       alert('创建失败');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // 打开编辑工单对话框
+  const handleOpenEditTicket = (ticket: any) => {
+    setEditingTicket(ticket);
+    setEditTicket({
+      title: ticket.title,
+      description: ticket.description,
+      type: ticket.type,
+      priority: ticket.priority,
+      status: ticket.status
+    });
+    setShowEditTicket(true);
+  };
+
+  // 保存编辑工单
+  const handleUpdateTicket = async () => {
+    if (!editingTicket || !editTicket.title) {
+      alert('请输入工单标题');
+      return;
+    }
+
+    try {
+      setEditing(true);
+      const response = await fetch(`/api/tickets/${editingTicket.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editTicket)
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setShowEditTicket(false);
+        setEditingTicket(null);
+        fetchResources();
+      } else {
+        alert('保存失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('更新工单失败:', error);
+      alert('保存失败');
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -956,13 +1012,17 @@ export default function ProjectResourcesPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenEditTicket(ticket)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            编辑
+                          </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link href={`/tickets/${ticket.id}`}>
                               <Edit className="h-4 w-4 mr-2" />
                               查看
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-red-600"
                             onClick={() => setDeleteTarget({ type: 'ticket', id: ticket.id })}
                           >
@@ -1341,6 +1401,79 @@ export default function ProjectResourcesPage() {
             <Button onClick={handleCreateTicket} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
               创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑工单弹窗 */}
+      <Dialog open={showEditTicket} onOpenChange={setShowEditTicket}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>编辑工单</DialogTitle>
+            <DialogDescription>编辑工单信息</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>标题</Label>
+              <Input
+                value={editTicket.title}
+                onChange={(e) => setEditTicket({ ...editTicket, title: e.target.value })}
+                placeholder="工单标题"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>类型</Label>
+                <Select value={editTicket.type} onValueChange={(v) => setEditTicket({ ...editTicket, type: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bug">Bug</SelectItem>
+                    <SelectItem value="feature">功能</SelectItem>
+                    <SelectItem value="improvement">改进</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>优先级</Label>
+                <Select value={editTicket.priority} onValueChange={(v) => setEditTicket({ ...editTicket, priority: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低</SelectItem>
+                    <SelectItem value="medium">中</SelectItem>
+                    <SelectItem value="high">高</SelectItem>
+                    <SelectItem value="critical">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>状态</Label>
+              <Select value={editTicket.status} onValueChange={(v) => setEditTicket({ ...editTicket, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">待处理</SelectItem>
+                  <SelectItem value="in_progress">进行中</SelectItem>
+                  <SelectItem value="resolved">已解决</SelectItem>
+                  <SelectItem value="closed">已关闭</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>描述</Label>
+              <Textarea
+                value={editTicket.description}
+                onChange={(e) => setEditTicket({ ...editTicket, description: e.target.value })}
+                placeholder="详细描述..."
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditTicket(false)}>取消</Button>
+            <Button onClick={handleUpdateTicket} disabled={editing}>
+              {editing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
