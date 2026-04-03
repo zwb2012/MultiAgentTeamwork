@@ -63,7 +63,8 @@ import {
   User,
   UserPlus,
   Globe,
-  Clock
+  Clock,
+  Play
 } from 'lucide-react';
 import type { Agent } from '@/types/agent';
 import type { Project } from '@/types/project';
