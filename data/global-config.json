@@ -8,11 +8,11 @@
     "user_name": "zwb2012",
     "user_email": "zhuangwen46@163.com",
     "default_branch": "main",
-    "token": "320f7d1b5f7533fac4299fc44cab4fba:12a993027ac694bbd31d21a774caf325:c070ea1867244c718f0a32cea186099ad64182c342b576e3a1a181e74288a836b54c9915e97f49f9"
+    "token": "c4cb4a230898b107ac55e49577dbe203:6e08e7047370a84201d1bd0f6b93a89f:9bfd1b9eff717c0992e03f333b73f06f0b550bf2368e275f5eca87b62bbd029c1cbfccfbe7714f56"
   },
   "settings": {
     "auto_health_check": false,
     "health_check_interval": 30
   },
-  "updated_at": "2026-04-03T14:15:04.410Z"
+  "updated_at": "2026-04-03T14:25:57.438Z"
 }
