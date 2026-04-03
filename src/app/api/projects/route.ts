@@ -159,7 +159,7 @@ function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): s
   // 获取当前平台
   const platform = os.platform();
   let platformKey: 'windows' | 'linux' | 'macos' | 'default';
-  
+
   if (platform === 'win32') {
     platformKey = 'windows';
   } else if (platform === 'darwin') {
@@ -167,23 +167,28 @@ function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): s
   } else {
     platformKey = 'linux';
   }
-  
+
   // 尝试获取平台特定路径
   if (pathConfig) {
     const platformPath = pathConfig[platformKey];
     if (platformPath) {
-      return platformPath;
+      // 拼接项目名称到平台路径
+      const separator = platformPath.endsWith('/') || platformPath.endsWith('\\') ? '' : '/';
+      const safeProjectName = projectName ? projectName.replace(/[^a-zA-Z0-9-_]/g, '_') : 'project';
+      return `${platformPath}${separator}${safeProjectName}`;
     }
-    
+
     // 尝试默认路径
     if (pathConfig.default) {
-      return pathConfig.default;
+      const separator = pathConfig.default.endsWith('/') || pathConfig.default.endsWith('\\') ? '' : '/';
+      const safeProjectName = projectName ? projectName.replace(/[^a-zA-Z0-9-_]/g, '_') : 'project';
+      return `${pathConfig.default}${separator}${safeProjectName}`;
     }
   }
-  
+
   // 使用系统默认路径
   const baseDir = process.env.PROJECTS_DIR || '/tmp/projects';
   const projectDir = projectName ? `${baseDir}/${projectName.replace(/[^a-zA-Z0-9-_]/g, '_')}` : baseDir;
-  
+
   return projectDir;
 }

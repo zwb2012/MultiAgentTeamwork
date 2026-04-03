@@ -326,7 +326,7 @@ function isValidGitUrl(url: string): boolean {
 function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): string {
   const platform = os.platform();
   let platformKey: 'windows' | 'linux' | 'macos' | 'default';
-  
+
   if (platform === 'win32') {
     platformKey = 'windows';
   } else if (platform === 'darwin') {
@@ -334,20 +334,26 @@ function resolveLocalPath(pathConfig?: LocalPathConfig, projectName?: string): s
   } else {
     platformKey = 'linux';
   }
-  
+
   if (pathConfig) {
     const platformPath = pathConfig[platformKey];
     if (platformPath) {
-      return platformPath;
+      // 拼接项目名称到平台路径
+      const separator = platformPath.endsWith('/') || platformPath.endsWith('\\') ? '' : '/';
+      const safeProjectName = projectName ? projectName.replace(/[^a-zA-Z0-9-_]/g, '_') : 'project';
+      return `${platformPath}${separator}${safeProjectName}`;
     }
-    
+
     if (pathConfig.default) {
-      return pathConfig.default;
+      // 拼接项目名称到默认路径
+      const separator = pathConfig.default.endsWith('/') || pathConfig.default.endsWith('\\') ? '' : '/';
+      const safeProjectName = projectName ? projectName.replace(/[^a-zA-Z0-9-_]/g, '_') : 'project';
+      return `${pathConfig.default}${separator}${safeProjectName}`;
     }
   }
-  
+
   const baseDir = process.env.PROJECTS_DIR || '/tmp/projects';
   const projectDir = projectName ? `${baseDir}/${projectName.replace(/[^a-zA-Z0-9-_]/g, '_')}` : baseDir;
-  
+
   return projectDir;
 }
