@@ -8,10 +8,10 @@ import { skillRegistry } from '@/lib/skills/registry';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: agentId } = params;
+    const { id: agentId } = await params;
 
     // 从数据库获取技能配置
     const client = getSupabaseClient();
@@ -79,10 +79,10 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: agentId } = params;
+    const { id: agentId } = await params;
     const body = await request.json();
 
     const { enabled_skills, skill_priorities, skill_combinations } = body;
@@ -135,10 +135,10 @@ export async function PUT(
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: agentId } = params;
+    const { id: agentId } = await params;
     const body = await request.json();
     const { skill_id, enabled } = body;
 
