@@ -39,7 +39,8 @@ import {
   Terminal,
   Key,
   Globe,
-  FileText
+  FileText,
+  Zap
 } from 'lucide-react';
 import { 
   AGENT_ROLE_TEMPLATES, 
@@ -468,7 +469,14 @@ export default function AgentsPage() {
             <Bot className="h-6 w-6" />
             <h1 className="text-xl font-bold">智能体管理</h1>
           </div>
-          
+
+          <Button variant="outline" asChild>
+            <Link href="/skills">
+              <Zap className="h-4 w-4 mr-2" />
+              技能管理
+            </Link>
+          </Button>
+
           {/* Tab 切换 */}
           <div className="flex items-center gap-4">
             <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
@@ -1051,6 +1059,18 @@ export default function AgentsPage() {
                 </div>
                 
                 <div className="flex items-center gap-2 flex-wrap">
+                  {agent.agent_type === 'llm' && (
+                    <Button
+                      asChild
+                      size="sm"
+                      variant="outline"
+                    >
+                      <Link href={`/agents/${agent.id}/skills`}>
+                        <Zap className="h-3 w-3 mr-1" />
+                        配置技能
+                      </Link>
+                    </Button>
+                  )}
                   <Button 
                     size="sm" 
                     variant="outline"

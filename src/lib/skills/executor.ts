@@ -51,7 +51,17 @@ export class SkillExecutor {
       return {
         success: false,
         error: `Skill not found: ${skillId}`,
-        metadata: { execution_time: 0 }
+        metadata: { execution_time: 0, skill_id: skillId }
+      };
+    }
+
+    // 参数验证
+    const validationError = this.validateParams(skill, params);
+    if (validationError) {
+      return {
+        success: false,
+        error: validationError,
+        metadata: { execution_time: 0, skill_id: skillId }
       };
     }
 
@@ -69,18 +79,25 @@ export class SkillExecutor {
         await this.initializeLLMClient();
       }
 
+      // 添加超时保护
+      const timeoutPromise = new Promise<SkillResult>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Skill execution timeout (${this.getSkillTimeout(skillId)}ms)`));
+        }, this.getSkillTimeout(skillId));
+      });
+
       // 执行技能
-      let result: SkillResult;
-      if (skill.capabilities.requires_local_execution) {
-        // 本地执行
-        result = await this.executeLocalSkill(skill, params, finalContext);
-      } else if (skill.capabilities.requires_llm) {
-        // LLM执行
-        result = await this.executeLLMSkill(skill, params, finalContext);
-      } else {
-        // 直接执行
-        result = await skill.capabilities.executor(params, finalContext);
-      }
+      const executionPromise = (async () => {
+        if (skill.capabilities.requires_local_execution) {
+          return await this.executeLocalSkill(skill, params, finalContext);
+        } else if (skill.capabilities.requires_llm) {
+          return await this.executeLLMSkill(skill, params, finalContext);
+        } else {
+          return await skill.capabilities.executor(params, finalContext);
+        }
+      })();
+
+      const result = await Promise.race([executionPromise, timeoutPromise]) as SkillResult;
 
       const executionTime = Date.now() - startTime;
 
@@ -98,20 +115,69 @@ export class SkillExecutor {
     } catch (error) {
       const executionTime = Date.now() - startTime;
 
+      let errorMessage = 'Skill execution failed';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      // 记录错误日志
       const errorResult: SkillResult = {
         success: false,
-        error: error instanceof Error ? error.message : 'Skill execution failed',
+        error: errorMessage,
         metadata: {
           execution_time: executionTime,
-          skill_id: skillId
+          skill_id: skillId,
+          error_type: error instanceof Error ? error.constructor.name : 'Unknown'
         }
       };
 
-      // 记录错误日志
       await this.logSkillExecution(skillId, params, errorResult, executionTime);
 
       return errorResult;
     }
+  }
+
+  /**
+   * 验证技能参数
+   */
+  private validateParams(skill: Skill, params: any): string | null {
+    if (!params || typeof params !== 'object') {
+      return 'Invalid params: must be an object';
+    }
+
+    const requiredParams = skill.capabilities.function_definition.parameters.required || [];
+    const missingParams: string[] = [];
+
+    for (const paramName of requiredParams) {
+      if (!(paramName in params) || params[paramName] === null || params[paramName] === undefined) {
+        missingParams.push(paramName);
+      }
+    }
+
+    if (missingParams.length > 0) {
+      return `Missing required parameters: ${missingParams.join(', ')}`;
+    }
+
+    return null;
+  }
+
+  /**
+   * 获取技能超时时间
+   */
+  private getSkillTimeout(skillId: string): number {
+    // 不同技能设置不同的超时时间
+    const timeouts: Record<string, number> = {
+      'command-execution': 60000, // 命令执行60秒
+      'code-generation': 30000, // 代码生成30秒
+      'prd-design': 20000, // PRD设计20秒
+      'file-creation': 5000, // 文件创建5秒
+      'file-read': 5000, // 文件读取5秒
+      'directory-creation': 3000, // 目录创建3秒
+      'copywriting': 15000, // 文案编写15秒
+      'requirement-analysis': 15000 // 需求分析15秒
+    };
+
+    return timeouts[skillId] || 30000; // 默认30秒
   }
 
   /**
