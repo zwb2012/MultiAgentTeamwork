@@ -25,7 +25,8 @@ import {
   FileText,
   Shield,
   Workflow,
-  Activity
+  Activity,
+  Zap
 } from 'lucide-react';
 
 interface NavItem {
@@ -107,6 +108,11 @@ const navItems: NavItem[] = [
     title: '工单管理',
     href: '/tickets',
     icon: <Ticket className="h-5 w-5" />
+  },
+  {
+    title: '技能管理',
+    href: '/skills',
+    icon: <Zap className="h-5 w-5" />
   },
   {
     title: '系统设置',

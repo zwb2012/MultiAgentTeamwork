@@ -566,3 +566,61 @@ export const agent_roles = pgTable(
     index("agent_roles_is_active_idx").on(table.is_active),
   ]
 );
+
+// ==================== 技能系统相关表 ====================
+
+// 智能体技能配置表
+export const agent_skills = pgTable(
+  "agent_skills",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    agent_id: varchar("agent_id", { length: 36 }).notNull().references(() => agents.id, { onDelete: "cascade" }),
+
+    // 启用的技能ID列表
+    enabled_skills: jsonb("enabled_skills").default('[]'),
+
+    // 技能优先级配置 {skill_id: priority}
+    skill_priorities: jsonb("skill_priorities").default('{}'),
+
+    // 技能组合配置 [{skills: [], name, description}]
+    skill_combinations: jsonb("skill_combinations").default('[]'),
+
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("agent_skills_agent_id_idx").on(table.agent_id),
+  ]
+);
+
+// 技能执行日志表
+export const skill_executions = pgTable(
+  "skill_executions",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    skill_id: varchar("skill_id", { length: 100 }).notNull(),
+    agent_id: varchar("agent_id", { length: 36 }).references(() => agents.id, { onDelete: "set null" }),
+
+    // 执行参数
+    params: jsonb("params"),
+
+    // 执行结果
+    result: jsonb("result"),
+
+    // 执行元数据
+    execution_time: integer("execution_time").default(0),
+    success: boolean("success").default(false),
+
+    // 项目上下文（用于追溯）
+    project_id: varchar("project_id", { length: 36 }),
+
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("skill_executions_skill_id_idx").on(table.skill_id),
+    index("skill_executions_agent_id_idx").on(table.agent_id),
+    index("skill_executions_project_id_idx").on(table.project_id),
+    index("skill_executions_created_at_idx").on(table.created_at),
+    index("skill_executions_success_idx").on(table.success),
+  ]
+);

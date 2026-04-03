@@ -37,6 +37,7 @@
 │   │   │   └── editor/     # 流水线可视化编辑器
 │   │   ├── tasks/          # 任务管理页面
 │   │   ├── tickets/        # 工单管理页面
+│   │   ├── skills/         # 技能管理页面
 │   │   ├── settings/       # 全局设置页面
 │   │   └── api/            # API路由
 │   ├── components/ui/      # Shadcn UI 组件库
@@ -47,17 +48,24 @@
 │   │   ├── pipeline-db-store.ts   # 流水线数据库存储
 │   │   ├── ticket-db-store.ts     # 工单数据库存储
 │   │   ├── global-config.ts    # 全局配置管理
-│   │   └── file-store.ts       # 文件存储工具
+│   │   ├── file-store.ts       # 文件存储工具
+│   │   └── skills/             # 技能系统
+│   │       ├── types.ts         # 技能类型定义
+│   │       ├── registry.ts      # 技能注册表
+│   │       ├── executor.ts      # 技能执行引擎
+│   │       └── enhanced-chat.ts # 技能增强聊天
 │   ├── types/              # TypeScript 类型定义
 │   │   ├── agent.ts        # 智能体相关类型
 │   │   ├── conversation.ts # 会话相关类型
-│   │   └── pipeline.ts     # 流水线相关类型
+│   │   ├── pipeline.ts     # 流水线相关类型
+│   │   └── skill.ts        # 技能相关类型
 │   └── storage/            # 数据存储
 │       └── database/       # 数据库相关
 │           └── shared/
 │               └── schema.ts   # 数据库表定义
 ├── docs/                   # 文档目录
 │   ├── database-migration-v2.md  # 数据库迁移指南
+│   ├── database-migration-skills.md  # 技能系统数据库迁移
 │   └── parallel-merge-design.md  # 并行节点汇聚方案设计
 ├── next.config.ts          # Next.js 配置
 ├── package.json            # 项目依赖管理
@@ -118,13 +126,28 @@
 - Base URL配置
 - 默认模型选择
 
+### 5. 技能插槽系统 (`/skills`)
+- **技能注册表**：预定义8个核心技能
+  - 代码生成、文件创建、目录创建、文件读取
+  - 命令执行、文案编写、PRD设计、需求分析
+- **技能分类**：代码开发、文本处理、分析能力、设计规划、集成能力
+- **智能体技能配置**：为每个LLM智能体单独配置启用哪些技能
+- **技能执行**：通过Function Calling机制让LLM主动调用技能
+- **执行日志**：记录所有技能执行情况，支持统计和追溯
+
 ## 数据库迁移
 
+### 主迁移脚本
 数据库迁移SQL脚本位于 `docs/database-migration-v2.md`，包含：
 - 会话类型扩展
 - 消息类型扩展
 - 流水线节点汇聚配置
 - 智能体状态字段
+
+### 技能系统迁移
+技能系统数据库迁移SQL脚本位于 `docs/database-migration-skills.md`，包含：
+- `agent_skills` 表：存储智能体技能配置
+- `skill_executions` 表：存储技能执行日志
 
 在Supabase控制台的SQL Editor中执行迁移脚本。
 
@@ -146,5 +169,23 @@
   - 流水线编辑器只能选择当前项目的智能体
   - 工单执行流水线时只显示同项目的流水线
   - 全局流水线页面改为运行记录列表页 (`/pipelines/run`)
+
+### 技能插槽系统
+- **设计目标**：为LLM智能体配备各种专业能力，实现类似扣子空间的技能系统
+- **实现方式**：
+  - 预定义技能：在 `src/lib/skills/registry.ts` 中注册核心技能
+  - 技能执行引擎：`src/lib/skills/executor.ts` 负责技能路由和执行
+  - 智能体配置：通过 `agent_skills` 表为每个智能体配置启用哪些技能
+  - 技能增强聊天：`src/lib/skills/enhanced-chat.ts` 提供集成技能的对话能力
+- **技能类别**：
+  - 代码开发：代码生成、文件操作、命令执行
+  - 文本处理：文案编写、文本生成
+  - 分析能力：需求分析、数据分析
+  - 设计规划：PRD设计、架构设计
+  - 集成能力：API调用、第三方集成
+- **注意事项**：
+  - 技能执行器在服务端运行，避免客户端导入node模块
+  - 技能调用通过LLM文本识别实现，兼容不支持Function Calling的SDK
+  - 所有技能执行记录到 `skill_executions` 表，便于统计和调试
 
 
