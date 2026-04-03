@@ -24,7 +24,8 @@ import {
   User,
   Zap,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Square
 } from 'lucide-react';
 
 // 运行状态配置
@@ -148,6 +149,7 @@ export default function PipelineRunDetailPage() {
   const [data, setData] = useState<RunData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -226,6 +228,33 @@ export default function PipelineRunDetailPage() {
     return Math.round(((completed_nodes + failed_nodes) / total_nodes) * 100);
   };
 
+  // 取消运行
+  const handleCancel = async () => {
+    if (!data || data.run.status !== 'running') return;
+    
+    if (!confirm('确定要取消这个流水线运行吗？')) return;
+    
+    try {
+      setCancelling(true);
+      const response = await fetch(`/api/pipeline-runs/${runId}/cancel`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        fetchData(true);
+      } else {
+        alert('取消失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('取消失败:', error);
+      alert('取消失败');
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -298,6 +327,21 @@ export default function PipelineRunDetailPage() {
               )}
               刷新
             </Button>
+            {data.run.status === 'running' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Square className="h-4 w-4 mr-2" />
+                )}
+                取消
+              </Button>
+            )}
             {data.run.conversation_id && (
               <Link href={`/conversations/${data.run.conversation_id}`}>
                 <Button variant="outline" size="sm">

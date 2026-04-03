@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPipelineRun, getPipeline } from '@/lib/pipeline-db-store';
+import { getPipelineRun, getPipeline, cancelPipelineRun } from '@/lib/pipeline-db-store';
 
 // GET /api/pipeline-runs/[id] - 获取流水线运行详情
 export async function GET(
@@ -51,6 +51,46 @@ export async function GET(
     console.error('获取流水线运行详情失败:', error);
     return NextResponse.json(
       { success: false, error: '获取运行详情失败' },
+      { status: 500 }
+    );
+  }
+}
+
+// POST /api/pipeline-runs/[id]/cancel - 取消流水线运行
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    
+    // 检查是否是取消操作
+    const url = new URL(request.url);
+    if (url.pathname.endsWith('/cancel')) {
+      const run = await cancelPipelineRun(id);
+      
+      if (!run) {
+        return NextResponse.json(
+          { success: false, error: '运行记录不存在' },
+          { status: 404 }
+        );
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        data: run,
+        message: '流水线运行已取消' 
+      });
+    }
+    
+    return NextResponse.json(
+      { success: false, error: '未知操作' },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('取消流水线运行失败:', error);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : '取消运行失败' },
       { status: 500 }
     );
   }

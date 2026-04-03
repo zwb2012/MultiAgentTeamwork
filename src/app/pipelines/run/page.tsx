@@ -10,7 +10,8 @@ import {
   Clock,
   ArrowRight,
   Play,
-  RefreshCw
+  RefreshCw,
+  Square
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +38,7 @@ const RUN_STATUS_CONFIG = {
 export default function PipelineRunsPage() {
   const [runs, setRuns] = useState<PipelineRun[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRuns();
@@ -94,6 +96,31 @@ export default function PipelineRunsPage() {
     if (duration < 60) return `${duration}秒`;
     if (duration < 3600) return `${Math.floor(duration / 60)}分${duration % 60}秒`;
     return `${Math.floor(duration / 3600)}小时${Math.floor((duration % 3600) / 60)}分`;
+  };
+
+  const handleCancel = async (runId: string) => {
+    if (!confirm('确定要取消这个流水线运行吗？')) return;
+    
+    try {
+      setCancelling(runId);
+      const response = await fetch(`/api/pipeline-runs/${runId}/cancel`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        fetchRuns();
+        alert('已取消');
+      } else {
+        alert('取消失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('取消失败:', error);
+      alert('取消失败');
+    } finally {
+      setCancelling(null);
+    }
   };
 
   return (
@@ -176,11 +203,23 @@ export default function PipelineRunsPage() {
                     <TableCell>{formatTime(run.started_at)}</TableCell>
                     <TableCell>{formatTime(run.completed_at)}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/pipelines/run/${run.id}`}>
-                          <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        {run.status === 'running' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCancel(run.id)}
+                            disabled={cancelling === run.id}
+                          >
+                            <Square className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link href={`/pipelines/run/${run.id}`}>
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
