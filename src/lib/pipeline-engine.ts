@@ -601,22 +601,28 @@ export class PipelineEngine {
     try {
       // 使用 LLM 调用智能体
       const { LLMClient, Config } = await import('coze-coding-dev-sdk');
+      const { getEffectiveAPIConfig } = await import('./global-config');
       const config = new Config();
       const llmClient = new LLMClient(config);
-      
+
       const messages = [
         { role: 'system' as const, content: systemPrompt },
         { role: 'user' as const, content: userMessage }
       ];
-      
-      // 构建LLM配置
+
+      // 构建LLM配置 - 优先使用智能体的配置
+      const agentModelConfig = agent.model_config || {};
+      const effectiveAPIConfig = getEffectiveAPIConfig(agentModelConfig as any);
+
       const llmConfig = {
-        model: agent.model || 'doubao-seed-1-8-251228',
-        temperature: agent.temperature || 0.7,
-        thinking: 'disabled' as const,
-        caching: 'disabled' as const
+        model: agent.model_config_id || agent.model || 'doubao-seed-1-8-251228',
+        temperature: agentModelConfig.temperature || 0.7,
+        thinking: agentModelConfig.thinking || 'disabled' as const,
+        caching: agentModelConfig.caching || 'disabled' as const,
+        api_key: effectiveAPIConfig.api_key,
+        base_url: effectiveAPIConfig.base_url
       };
-      
+
       // 流式读取响应
       const llmStream = llmClient.stream(messages, llmConfig);
       for await (const chunk of llmStream) {
@@ -627,7 +633,7 @@ export class PipelineEngine {
           agentResponse += chunk.content.toString();
         }
       }
-      
+
     } catch (llmError) {
       console.error('调用智能体失败:', llmError);
       throw new Error(`智能体调用失败: ${llmError instanceof Error ? llmError.message : '未知错误'}`);
