@@ -53,7 +53,12 @@ export class PipelineEngine {
     
     // 3. 创建运行记录
     const run = await this.createRun(pipeline, conversation.id, triggerBy, ticket);
-    
+
+    // 3.5. 如果有工单信息，更新工单状态
+    if (ticket?.ticket_id) {
+      await this.updateTicketStatusOnRunStart(ticket.ticket_id, run.id);
+    }
+
     // 初始化取消标记
     cancellationTokens.set(run.id, false);
     
@@ -1086,6 +1091,102 @@ export class PipelineEngine {
         completed_at: new Date().toISOString()
       })
       .eq('id', runId);
+
+    // 更新关联的工单状态
+    await this.updateTicketStatusOnRunComplete(runId, status);
+  }
+
+  /**
+   * 流水线运行开始时更新工单状态
+   */
+  private async updateTicketStatusOnRunStart(ticketId: string, runId: string): Promise<void> {
+    const timeoutAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2小时后超时
+
+    await this.client
+      .from('tickets')
+      .update({
+        status: 'in_progress',
+        current_pipeline_run_id: runId,
+        timeout_at: timeoutAt,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', ticketId);
+
+    // 添加流转历史
+    await this.client
+      .from('ticket_history')
+      .insert({
+        ticket_id: ticketId,
+        from_status: 'open',
+        to_status: 'in_progress',
+        comment: '流水线开始执行',
+        created_at: new Date().toISOString()
+      });
+
+    console.log(`工单 ${ticketId} 状态已更新为处理中，关联流水线运行 ${runId}`);
+  }
+
+  /**
+   * 流水线运行完成时更新工单状态
+   */
+  private async updateTicketStatusOnRunComplete(runId: string, runStatus: RunStatus): Promise<void> {
+    // 查询流水线运行记录，获取工单信息
+    const { data: run } = await this.client
+      .from('pipeline_runs')
+      .select('input_data')
+      .eq('id', runId)
+      .single();
+
+    if (!run?.input_data?.ticket_id) {
+      // 没有关联工单，直接返回
+      return;
+    }
+
+    const ticketId = run.input_data.ticket_id;
+
+    // 根据运行状态更新工单状态
+    let newStatus: string = 'open';
+    let comment = '';
+
+    if (runStatus === 'success') {
+      newStatus = 'resolved';
+      comment = '流水线执行成功';
+    } else if (runStatus === 'failed') {
+      newStatus = 'open';
+      comment = '流水线执行失败，已重置为待处理';
+    } else if (runStatus === 'cancelled') {
+      newStatus = 'open';
+      comment = '流水线执行已取消，已重置为待处理';
+    }
+
+    // 更新工单状态
+    const updateData: any = {
+      status: newStatus,
+      current_pipeline_run_id: null, // 清除流水线运行ID
+      updated_at: new Date().toISOString()
+    };
+
+    if (newStatus === 'resolved') {
+      updateData.completed_at = new Date().toISOString();
+    }
+
+    await this.client
+      .from('tickets')
+      .update(updateData)
+      .eq('id', ticketId);
+
+    // 添加流转历史
+    await this.client
+      .from('ticket_history')
+      .insert({
+        ticket_id: ticketId,
+        from_status: 'in_progress',
+        to_status: newStatus,
+        comment: comment,
+        created_at: new Date().toISOString()
+      });
+
+    console.log(`工单 ${ticketId} 状态已更新为 ${newStatus}: ${comment}`);
   }
   
   /**

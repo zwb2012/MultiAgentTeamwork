@@ -220,6 +220,10 @@ export interface Ticket {
   status: TicketStatus;
   assignee_id?: string;
   reporter_id?: string;
+  project_id?: string;
+  current_pipeline_run_id?: string; // 当前关联的流水线运行ID
+  completed_at?: string; // 完成时间
+  timeout_at?: string; // 超时时间
   created_at: string;
   updated_at?: string;
 }
