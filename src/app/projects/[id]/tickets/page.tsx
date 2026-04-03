@@ -525,21 +525,21 @@ export default function ProjectTicketsPage() {
                             </div>
                             
                             <div className="flex items-center gap-2">
-                              {/* 调试：始终显示按钮 */}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  console.log('点击了处理按钮，工单ID:', ticket.id);
-                                  router.push(`/tickets/${ticket.id}`);
-                                }}
-                              >
-                                <Play className="h-4 w-4 mr-1" />
-                                处理
-                              </Button>
-
-                              {/* 更新状态按钮 - 处理中状态显示 */}
+                              {/* 测试文本 */}
+                              <span className="text-red-500 text-xs">DEBUG: status={ticket.status}</span>
+                              {ticket.status === 'open' && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/tickets/${ticket.id}`);
+                                  }}
+                                >
+                                  <Play className="h-4 w-4 mr-1" />
+                                  处理
+                                </Button>
+                              )}
                               {ticket.status === 'in_progress' && (
                                 <Button
                                   size="sm"
