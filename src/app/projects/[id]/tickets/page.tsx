@@ -131,13 +131,7 @@ export default function ProjectTicketsPage() {
     description: '',
     priority: 'medium' as TicketPriority
   });
-  
-  // 执行流水线对话框
-  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [selectedPipelineId, setSelectedPipelineId] = useState<string>('');
-  const [executing, setExecuting] = useState(false);
-  
+
   // 流转对话框
   const [flowDialogOpen, setFlowDialogOpen] = useState(false);
   const [flowMode, setFlowMode] = useState<'status' | 'agent' | 'pipeline'>('status');
@@ -186,7 +180,7 @@ export default function ProjectTicketsPage() {
         // 只显示已发布的流水线
         setPipelines(pipelinesData.data.filter((p: Pipeline) => p.status === 'published'));
       }
-      
+
       if (agentsData.success) {
         setAgents(agentsData.data);
       }
@@ -263,55 +257,9 @@ export default function ProjectTicketsPage() {
   // 获取推荐的流水线ID
   const getRecommendedPipelineId = (ticketType: TicketType): string | null => {
     if (!project?.default_pipelines) return null;
-    
+
     const defaultPipelines = project.default_pipelines as DefaultPipelines;
     return defaultPipelines[ticketType] || null;
-  };
-
-  // 执行流水线
-  const handleExecutePipeline = async () => {
-    if (!selectedTicket || !selectedPipelineId) {
-      alert('请选择流水线');
-      return;
-    }
-    
-    try {
-      setExecuting(true);
-      
-      const response = await fetch(`/api/pipelines/${selectedPipelineId}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticket: {
-            id: selectedTicket.id,
-            type: selectedTicket.type,
-            title: selectedTicket.title,
-            description: selectedTicket.description || '',
-            priority: selectedTicket.priority
-          }
-        })
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        setExecuteDialogOpen(false);
-        fetchData();
-        // 跳转到执行详情页
-        if (result.data?.id) {
-          router.push(`/pipelines/run/${result.data.id}`);
-        } else {
-          alert('流水线已开始执行');
-        }
-      } else {
-        alert('执行失败: ' + result.error);
-      }
-    } catch (error) {
-      console.error('执行失败:', error);
-      alert('执行失败');
-    } finally {
-      setExecuting(false);
-    }
   };
 
   // 执行流转
@@ -578,20 +526,17 @@ export default function ProjectTicketsPage() {
                             
                             <div className="flex items-center gap-2">
                               {ticket.status === 'open' && (
-                                <>
-                                  {pipelines.length > 0 && (
-                                    <Button 
-                                      size="sm" 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        openExecuteDialog(ticket);
-                                      }}
-                                    >
-                                      <Play className="h-4 w-4 mr-1" />
-                                      执行流程
-                                    </Button>
-                                  )}
-                                </>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/tickets/${ticket.id}`);
+                                  }}
+                                >
+                                  <Play className="h-4 w-4 mr-1" />
+                                  处理
+                                </Button>
                               )}
                               
                               {ticket.status === 'in_progress' && (
@@ -738,82 +683,6 @@ export default function ProjectTicketsPage() {
                 </>
               ) : (
                 '创建工单'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 执行流水线对话框 */}
-      <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>执行流水线</DialogTitle>
-            <DialogDescription>
-              选择流水线处理工单: {selectedTicket?.title}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>选择流水线</Label>
-              <Select 
-                value={selectedPipelineId} 
-                onValueChange={setSelectedPipelineId}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="选择要执行的流水线" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pipelines.map(pipeline => (
-                    <SelectItem key={pipeline.id} value={pipeline.id}>
-                      <div className="flex items-center gap-2">
-                        <GitBranch className="h-4 w-4" />
-                        <span>{pipeline.name}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            {selectedPipelineId && (
-              <div className="p-3 bg-muted rounded-lg text-sm">
-                <p className="font-medium">{getPipelineName(selectedPipelineId)}</p>
-                <p className="text-muted-foreground mt-1">
-                  {pipelines.find(p => p.id === selectedPipelineId)?.description || '暂无描述'}
-                </p>
-              </div>
-            )}
-            
-            {pipelines.length === 0 && (
-              <div className="p-4 border border-dashed rounded-lg text-center text-muted-foreground">
-                <p>暂无可用的流水线</p>
-                <Link href={`/projects/${projectId}/pipelines/editor/new`} className="text-primary text-sm hover:underline">
-                  创建流水线
-                </Link>
-              </div>
-            )}
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExecuteDialogOpen(false)}>
-              取消
-            </Button>
-            <Button 
-              onClick={handleExecutePipeline} 
-              disabled={executing || !selectedPipelineId}
-            >
-              {executing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  执行中...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  开始执行
-                </>
               )}
             </Button>
           </DialogFooter>
