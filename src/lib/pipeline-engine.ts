@@ -140,6 +140,7 @@ export class PipelineEngine {
   /**
    * 创建流水线群组会话
    * 优先创建项目会话，如果流水线有 project_id，则创建绑定项目的会话
+   * 如果同一个工单、同一个流水线已经存在会话，则复用该会话
    */
   private async createPipelineConversation(
     pipeline: Pipeline,
@@ -152,46 +153,68 @@ export class PipelineEngine {
         agentIds.add(node.agent_id);
       }
     }
-    
+
     // 如果有工单信息，使用工单标题作为会话标题
     const conversationTitle = ticket?.ticket_title
       ? `工单: ${ticket.ticket_title}`
       : `${pipeline.name} - 流水线执行`;
 
-    // 创建会话 - 绑定到项目（如果流水线有 project_id）
-    const { data, error } = await this.client
-      .from('conversations')
-      .insert({
-        title: conversationTitle,
-        type: 'group', // 使用 group 类型，表示这是一个项目会话
-        project_id: pipeline.project_id || null, // 绑定到项目
-        config: {
-          pipeline_id: pipeline.id,
-          ticket_id: ticket?.ticket_id || null,
-          auto_notify: true
-        },
-        status: 'active'
-      })
-      .select()
-      .single();
-    
-    if (error || !data) {
-      throw new Error(`创建会话失败: ${error?.message}`);
+    // 如果有工单，检查是否已存在相同的会话（同一个工单ID + 同一个流水线ID）
+    let conversation: any = null;
+    if (ticket?.ticket_id) {
+      const { data: existingConversation, error: checkError } = await this.client
+        .from('conversations')
+        .select('*')
+        .eq('config->>pipeline_id', pipeline.id)
+        .eq('config->>ticket_id', ticket.ticket_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!checkError && existingConversation) {
+        conversation = existingConversation;
+        console.log('复用已存在的会话:', conversation.id);
+      }
     }
-    
-    // 添加参与者
-    if (agentIds.size > 0) {
-      const participants = Array.from(agentIds).map(agentId => ({
-        conversation_id: data.id,
-        agent_id: agentId
-      }));
-      
-      await this.client
-        .from('conversation_participants')
-        .insert(participants);
+
+    // 如果没有找到已存在的会话，则创建新的
+    if (!conversation) {
+      const { data, error } = await this.client
+        .from('conversations')
+        .insert({
+          title: conversationTitle,
+          type: 'group', // 使用 group 类型，表示这是一个项目会话
+          project_id: pipeline.project_id || null, // 绑定到项目
+          config: {
+            pipeline_id: pipeline.id,
+            ticket_id: ticket?.ticket_id || null,
+            auto_notify: true
+          },
+          status: 'active'
+        })
+        .select()
+        .single();
+
+      if (error || !data) {
+        throw new Error(`创建会话失败: ${error?.message}`);
+      }
+
+      conversation = data;
+
+      // 添加参与者（仅在新创建会话时）
+      if (agentIds.size > 0) {
+        const participants = Array.from(agentIds).map(agentId => ({
+          conversation_id: conversation.id,
+          agent_id: agentId
+        }));
+
+        await this.client
+          .from('conversation_participants')
+          .insert(participants);
+      }
     }
-    
-    return data;
+
+    return conversation;
   }
   
   /**
