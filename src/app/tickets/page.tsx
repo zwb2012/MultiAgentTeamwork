@@ -555,12 +555,15 @@ export default function TicketsPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => handleOpenEditDialog(ticket)}>
+                                    <DropdownMenuItem onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenEditDialog(ticket);
+                                    }}>
                                       <Edit className="h-4 w-4 mr-2" />
                                       编辑
                                     </DropdownMenuItem>
                                     <DropdownMenuItem
-                                      onClick={() => {
+                                      onClick={(e) => {
                                         e.stopPropagation();
                                         setDeletingTicketId(ticket.id);
                                         setDeleteDialogOpen(true);

@@ -1001,46 +1001,66 @@ export default function ProjectResourcesPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {tickets.map((ticket) => (
-                <Card key={ticket.id} className="hover:shadow-md transition-shadow">
+                <Card key={ticket.id} className="hover:shadow-md transition-shadow cursor-pointer">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg line-clamp-1">{ticket.title}</CardTitle>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleOpenEditTicket(ticket)}>
-                            <Edit className="h-4 w-4 mr-2" />
-                            编辑
-                          </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
-                            <Link href={`/tickets/${ticket.id}`}>
-                              <Edit className="h-4 w-4 mr-2" />
-                              查看
-                            </Link>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => setDeleteTarget({ type: 'ticket', id: ticket.id })}
+                      <div className="flex items-center gap-2">
+                        {ticket.status === 'open' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/tickets/${ticket.id}`);
+                            }}
                           >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                            <Play className="h-3 w-3 mr-1" />
+                            处理
+                          </Button>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <Button variant="ghost" size="sm">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditTicket(ticket);
+                            }}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              编辑
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget({ type: 'ticket', id: ticket.id });
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              删除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/tickets/${ticket.id}`);
+                    }}
+                  >
                     <div className="flex items-center gap-2">
                       <Badge variant={
                         ticket.status === 'open' ? 'destructive' :
                         ticket.status === 'in_progress' ? 'default' : 'secondary'
                       }>
-                        {ticket.status === 'open' ? '待处理' : 
-                         ticket.status === 'in_progress' ? '进行中' : 
+                        {ticket.status === 'open' ? '待处理' :
+                         ticket.status === 'in_progress' ? '进行中' :
                          ticket.status === 'resolved' ? '已解决' : '已关闭'}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
@@ -1388,7 +1408,7 @@ export default function ProjectResourcesPage() {
             </div>
             <div className="space-y-2">
               <Label>描述</Label>
-              <Textarea 
+              <Textarea
                 value={newTicket.description}
                 onChange={(e) => setNewTicket({ ...newTicket, description: e.target.value })}
                 placeholder="详细描述..."

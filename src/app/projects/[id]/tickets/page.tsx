@@ -618,22 +618,37 @@ export default function ProjectTicketsPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleOpenEditDialog(ticket)}>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditDialog(ticket);
+                                  }}>
                                     <Edit className="h-4 w-4 mr-2" />
                                     编辑
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => router.push(`/tickets/${ticket.id}`)}>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    router.push(`/tickets/${ticket.id}`);
+                                  }}>
                                     查看详情
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'status')}>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    openFlowDialog(ticket, 'status');
+                                  }}>
                                     更新状态
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'agent')}>
+                                  <DropdownMenuItem onClick={(e) => {
+                                    e.stopPropagation();
+                                    openFlowDialog(ticket, 'agent');
+                                  }}>
                                     分配负责人
                                   </DropdownMenuItem>
                                   {pipelines.length > 0 && (
-                                    <DropdownMenuItem onClick={() => openFlowDialog(ticket, 'pipeline')}>
+                                    <DropdownMenuItem onClick={(e) => {
+                                      e.stopPropagation();
+                                      openFlowDialog(ticket, 'pipeline');
+                                    }}>
                                       执行流水线
                                     </DropdownMenuItem>
                                   )}
