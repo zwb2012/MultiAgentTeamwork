@@ -26,6 +26,13 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Ticket as TicketIcon, 
   Plus,
@@ -98,6 +105,18 @@ export default function TicketsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // 编辑工单对话框
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    type: 'bug' as TicketType,
+    title: '',
+    description: '',
+    priority: 'medium' as TicketPriority,
+    status: 'open' as 'open' | 'in_progress' | 'resolved' | 'closed'
+  });
 
   useEffect(() => {
     fetchData();
@@ -209,16 +228,16 @@ export default function TicketsPage() {
   // 删除工单
   const handleDeleteTicket = async () => {
     if (!deletingTicketId) return;
-    
+
     try {
       setDeleting(true);
-      
+
       const response = await fetch(`/api/tickets/${deletingTicketId}`, {
         method: 'DELETE'
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         setDeleteDialogOpen(false);
         setDeletingTicketId(null);
@@ -232,6 +251,53 @@ export default function TicketsPage() {
       alert('删除失败');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  // 打开编辑对话框
+  const handleOpenEditDialog = (ticket: any) => {
+    setEditingTicketId(ticket.id);
+    setEditForm({
+      type: ticket.type,
+      title: ticket.title,
+      description: ticket.description || '',
+      priority: ticket.priority,
+      status: ticket.status
+    });
+    setEditDialogOpen(true);
+  };
+
+  // 保存编辑
+  const handleSaveEdit = async () => {
+    if (!editingTicketId || !editForm.title) {
+      alert('请输入工单标题');
+      return;
+    }
+
+    try {
+      setEditing(true);
+
+      const response = await fetch(`/api/tickets/${editingTicketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setEditDialogOpen(false);
+        setEditingTicketId(null);
+        // 刷新所有工单列表
+        fetchData();
+      } else {
+        alert('保存失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('保存工单失败:', error);
+      alert('保存失败');
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -470,8 +536,8 @@ export default function TicketsPage() {
                               
                               <div className="flex items-center gap-2">
                                 {ticket.status === 'open' && (
-                                  <Button 
-                                    size="sm" 
+                                  <Button
+                                    size="sm"
                                     variant="outline"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -482,17 +548,29 @@ export default function TicketsPage() {
                                     处理
                                   </Button>
                                 )}
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setDeletingTicketId(ticket.id);
-                                    setDeleteDialogOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                    <Button variant="ghost" size="sm">
+                                      <MoreVertical className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleOpenEditDialog(ticket)}>
+                                      <Edit className="h-4 w-4 mr-2" />
+                                      编辑
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      onClick={() => {
+                                        e.stopPropagation();
+                                        setDeletingTicketId(ticket.id);
+                                        setDeleteDialogOpen(true);
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      删除
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </div>
                           </CardContent>
@@ -630,6 +708,131 @@ export default function TicketsPage() {
                 </>
               ) : (
                 '创建工单'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑工单对话框 */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>编辑工单</DialogTitle>
+            <DialogDescription>
+              修改工单信息
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>工单类型</Label>
+              <Select
+                value={editForm.type}
+                onValueChange={(value) => setEditForm({ ...editForm, type: value as TicketType })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bug">
+                    <div className="flex items-center gap-2">
+                      <Bug className="h-4 w-4 text-red-500" />
+                      Bug 修复
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="feature">
+                    <div className="flex items-center gap-2">
+                      <Lightbulb className="h-4 w-4 text-blue-500" />
+                      新需求
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="improvement">
+                    <div className="flex items-center gap-2">
+                      <Wrench className="h-4 w-4 text-green-500" />
+                      改进优化
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="task">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-gray-500" />
+                      通用任务
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>标题 <span className="text-red-500">*</span></Label>
+              <Input
+                placeholder="输入工单标题"
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>描述</Label>
+              <Textarea
+                placeholder="输入工单描述"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={4}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>优先级</Label>
+                <Select
+                  value={editForm.priority}
+                  onValueChange={(value) => setEditForm({ ...editForm, priority: value as TicketPriority })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低</SelectItem>
+                    <SelectItem value="medium">中</SelectItem>
+                    <SelectItem value="high">高</SelectItem>
+                    <SelectItem value="critical">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>状态</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) => setEditForm({ ...editForm, status: value as any })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="open">待处理</SelectItem>
+                    <SelectItem value="in_progress">处理中</SelectItem>
+                    <SelectItem value="resolved">已解决</SelectItem>
+                    <SelectItem value="closed">已关闭</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={editing}>
+              {editing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                '保存'
               )}
             </Button>
           </DialogFooter>

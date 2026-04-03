@@ -48,6 +48,7 @@ import {
   Clock,
   GitBranch,
   Settings,
+  Edit,
   User,
   Bot,
   ExternalLink
@@ -130,6 +131,18 @@ export default function ProjectTicketsPage() {
     title: '',
     description: '',
     priority: 'medium' as TicketPriority
+  });
+
+  // 编辑工单对话框
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    type: 'bug' as TicketType,
+    title: '',
+    description: '',
+    priority: 'medium' as TicketPriority,
+    status: 'open' as 'open' | 'in_progress' | 'resolved' | 'closed'
   });
 
   // 流转对话框
@@ -260,6 +273,53 @@ export default function ProjectTicketsPage() {
 
     const defaultPipelines = project.default_pipelines as DefaultPipelines;
     return defaultPipelines[ticketType] || null;
+  };
+
+  // 打开编辑对话框
+  const handleOpenEditDialog = (ticket: any) => {
+    setEditingTicketId(ticket.id);
+    setEditForm({
+      type: ticket.type,
+      title: ticket.title,
+      description: ticket.description || '',
+      priority: ticket.priority,
+      status: ticket.status
+    });
+    setEditDialogOpen(true);
+  };
+
+  // 保存编辑
+  const handleSaveEdit = async () => {
+    if (!editingTicketId || !editForm.title) {
+      alert('请输入工单标题');
+      return;
+    }
+
+    try {
+      setEditing(true);
+
+      const response = await fetch(`/api/tickets/${editingTicketId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setEditDialogOpen(false);
+        setEditingTicketId(null);
+        // 刷新工单列表
+        fetchData();
+      } else {
+        alert('保存失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('保存工单失败:', error);
+      alert('保存失败');
+    } finally {
+      setEditing(false);
+    }
   };
 
   // 执行流转
@@ -525,8 +585,6 @@ export default function ProjectTicketsPage() {
                             </div>
                             
                             <div className="flex items-center gap-2">
-                              {/* 测试文本 */}
-                              <span className="text-red-500 text-xs">DEBUG: status={ticket.status}</span>
                               {ticket.status === 'open' && (
                                 <Button
                                   size="sm"
@@ -552,7 +610,7 @@ export default function ProjectTicketsPage() {
                                   更新状态
                                 </Button>
                               )}
-                              
+
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                                   <Button variant="ghost" size="sm">
@@ -560,6 +618,10 @@ export default function ProjectTicketsPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleOpenEditDialog(ticket)}>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    编辑
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => router.push(`/tickets/${ticket.id}`)}>
                                     查看详情
                                   </DropdownMenuItem>
@@ -684,6 +746,111 @@ export default function ProjectTicketsPage() {
                 </>
               ) : (
                 '创建工单'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 编辑工单对话框 */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>编辑工单</DialogTitle>
+            <DialogDescription>
+              修改工单信息
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>工单类型</Label>
+                <Select
+                  value={editForm.type}
+                  onValueChange={(value) => setEditForm({ ...editForm, type: value as TicketType })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bug">Bug 修复</SelectItem>
+                    <SelectItem value="feature">新需求</SelectItem>
+                    <SelectItem value="improvement">改进优化</SelectItem>
+                    <SelectItem value="task">通用任务</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>优先级</Label>
+                <Select
+                  value={editForm.priority}
+                  onValueChange={(value) => setEditForm({ ...editForm, priority: value as TicketPriority })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">低</SelectItem>
+                    <SelectItem value="medium">中</SelectItem>
+                    <SelectItem value="high">高</SelectItem>
+                    <SelectItem value="critical">紧急</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>工单标题 *</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                placeholder="例如：修复登录页面样式问题"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>详细描述</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="描述具体需求或问题..."
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>状态</Label>
+              <Select
+                value={editForm.status}
+                onValueChange={(value) => setEditForm({ ...editForm, status: value as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="open">待处理</SelectItem>
+                  <SelectItem value="in_progress">处理中</SelectItem>
+                  <SelectItem value="resolved">已解决</SelectItem>
+                  <SelectItem value="closed">已关闭</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={editing}>
+              {editing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                '保存'
               )}
             </Button>
           </DialogFooter>
