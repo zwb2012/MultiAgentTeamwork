@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
@@ -21,6 +22,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,6 +66,17 @@ export default function PipelineManagePage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
+  
+  // 执行对话框状态
+  const [executeDialogOpen, setExecuteDialogOpen] = useState(false);
+  const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(null);
+  const [executing, setExecuting] = useState(false);
+  const [ticketForm, setTicketForm] = useState({
+    type: 'task',
+    priority: 'medium',
+    title: '',
+    description: ''
+  });
 
   useEffect(() => {
     fetchProjects();
@@ -165,6 +188,61 @@ export default function PipelineManagePage() {
     return pipeline.run_status !== 'running';
   };
 
+  const openExecuteDialog = (pipeline: Pipeline) => {
+    setSelectedPipeline(pipeline);
+    setTicketForm({
+      type: 'task',
+      priority: 'medium',
+      title: '',
+      description: ''
+    });
+    setExecuteDialogOpen(true);
+  };
+
+  const handleExecute = async () => {
+    if (!selectedPipeline) return;
+    
+    if (!ticketForm.title) {
+      alert('请输入工单标题');
+      return;
+    }
+    
+    try {
+      setExecuting(true);
+      
+      const response = await fetch(`/api/pipelines/${selectedPipeline.id}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticket: {
+            id: `ticket-${Date.now()}`,
+            type: ticketForm.type,
+            title: ticketForm.title,
+            description: ticketForm.description || '',
+            priority: ticketForm.priority,
+            labels: []
+          }
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        setExecuteDialogOpen(false);
+        fetchPipelines();
+        // 跳转到运行详情页
+        router.push(`/pipelines/run/${result.data.id}`);
+      } else {
+        alert('执行失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('执行失败:', error);
+      alert('执行失败');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   // 按项目筛选流水线
   const filteredPipelines = selectedProject === 'all' 
     ? pipelines 
@@ -186,13 +264,14 @@ export default function PipelineManagePage() {
   const unassignedPipelines = filteredPipelines.filter(p => !p.project_id);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">流水线编排</h1>
-          <p className="text-muted-foreground">设计和编排多智能体协作流水线</p>
+    <React.Fragment>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">流水线编排</h1>
+            <p className="text-muted-foreground">设计和编排多智能体协作流水线</p>
+          </div>
         </div>
-      </div>
 
       {/* 筛选和操作栏 */}
       <Card>
@@ -418,12 +497,14 @@ export default function PipelineManagePage() {
                             </Button>
                           )}
                           {pipeline.status === 'published' && pipeline.run_status !== 'running' && (
-                            <Link href={`/projects/${project.id}/tickets`} className="flex-1">
-                              <Button size="sm" className="w-full">
-                                <Play className="h-4 w-4 mr-1" />
-                                执行
-                              </Button>
-                            </Link>
+                            <Button 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={() => openExecuteDialog(pipeline)}
+                            >
+                              <Play className="h-4 w-4 mr-1" />
+                              执行
+                            </Button>
                           )}
                           {pipeline.run_status === 'running' && (
                             <Button size="sm" variant="outline" className="flex-1" disabled>
@@ -479,5 +560,96 @@ export default function PipelineManagePage() {
         </div>
       )}
     </div>
+
+    {/* 执行对话框 */}
+    <Dialog open={executeDialogOpen} onOpenChange={setExecuteDialogOpen}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>执行流水线</DialogTitle>
+          <DialogDescription>
+            输入工单信息，流水线将按顺序执行
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="ticket-type">工单类型</Label>
+            <Select 
+              value={ticketForm.type} 
+              onValueChange={(value) => setTicketForm({ ...ticketForm, type: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择类型" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="bug">Bug 修复</SelectItem>
+                <SelectItem value="feature">新需求</SelectItem>
+                <SelectItem value="improvement">改进优化</SelectItem>
+                <SelectItem value="task">通用任务</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="ticket-title">工单标题 *</Label>
+            <Input
+              id="ticket-title"
+              value={ticketForm.title}
+              onChange={(e) => setTicketForm({ ...ticketForm, title: e.target.value })}
+              placeholder="例如：修复登录页面样式问题"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="ticket-priority">优先级</Label>
+            <Select 
+              value={ticketForm.priority} 
+              onValueChange={(value) => setTicketForm({ ...ticketForm, priority: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="选择优先级" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="low">低</SelectItem>
+                <SelectItem value="medium">中</SelectItem>
+                <SelectItem value="high">高</SelectItem>
+                <SelectItem value="critical">紧急</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="ticket-description">详细描述</Label>
+            <Textarea
+              id="ticket-description"
+              value={ticketForm.description}
+              onChange={(e) => setTicketForm({ ...ticketForm, description: e.target.value })}
+              placeholder="描述具体需求或问题..."
+              rows={4}
+            />
+          </div>
+        </div>
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setExecuteDialogOpen(false)}>
+            取消
+          </Button>
+          <Button onClick={handleExecute} disabled={executing}>
+            {executing ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                执行中...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-2" />
+                开始执行
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </React.Fragment>
   );
 }
