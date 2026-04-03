@@ -602,8 +602,7 @@ export class PipelineEngine {
       // 使用 LLM 调用智能体
       const { LLMClient, Config } = await import('coze-coding-dev-sdk');
       const { getEffectiveAPIConfig } = await import('./global-config');
-      const config = new Config();
-      const llmClient = new LLMClient(config);
+      const { decrypt } = await import('./encryption');
 
       const messages = [
         { role: 'system' as const, content: systemPrompt },
@@ -611,17 +610,55 @@ export class PipelineEngine {
       ];
 
       // 构建LLM配置 - 优先使用智能体的配置
+      let apiKey: string | undefined;
+      let baseUrl: string | undefined;
+      let modelName: string;
       const agentModelConfig = agent.model_config || {};
-      const effectiveAPIConfig = getEffectiveAPIConfig(agentModelConfig as any);
+
+      // 1. 优先使用 model_config_id 关联的配置
+      if (agent.model_config_id) {
+        const { data: config } = await this.client
+          .from('model_configs')
+          .select('*')
+          .eq('id', agent.model_config_id)
+          .single();
+
+        if (config) {
+          apiKey = config.api_key ? await decrypt(config.api_key) : undefined;
+          baseUrl = config.base_url || undefined;
+          modelName = config.default_model || 'doubao-seed-1-8-251228';
+        }
+      }
+
+      // 2. 兼容旧的 model_config 字段
+      if (!apiKey && agentModelConfig.api_key) {
+        apiKey = agentModelConfig.api_key;
+        baseUrl = agentModelConfig.base_url;
+        modelName = agent.model || 'doubao-seed-1-8-251228';
+      }
+
+      // 3. 最后使用全局配置
+      const effectiveAPIConfig = getEffectiveAPIConfig(apiKey ? { api_key: apiKey, base_url: baseUrl } : undefined);
+      if (!apiKey) {
+        apiKey = effectiveAPIConfig.api_key;
+        baseUrl = effectiveAPIConfig.base_url;
+      }
+
+      if (!modelName) {
+        modelName = agent.model || 'doubao-seed-1-8-251228';
+      }
 
       const llmConfig = {
-        model: agent.model_config_id || agent.model || 'doubao-seed-1-8-251228',
+        model: modelName,
         temperature: agentModelConfig.temperature || 0.7,
         thinking: agentModelConfig.thinking || 'disabled' as const,
         caching: agentModelConfig.caching || 'disabled' as const,
-        api_key: effectiveAPIConfig.api_key,
-        base_url: effectiveAPIConfig.base_url
+        api_key: apiKey,
+        base_url: baseUrl
       };
+
+      const config = new Config();
+      const llmClient = new LLMClient(config);
 
       // 流式读取响应
       const llmStream = llmClient.stream(messages, llmConfig);
