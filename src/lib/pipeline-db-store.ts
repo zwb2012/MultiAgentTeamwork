@@ -374,6 +374,9 @@ export async function restorePipeline(id: string): Promise<Pipeline | null> {
 /**
  * 运行流水线（支持工单输入）
  */
+/**
+ * 运行流水线
+ */
 export async function runPipeline(id: string, ticket?: TicketInput): Promise<PipelineRun> {
   const pipeline = await getPipeline(id);
   if (!pipeline) {
@@ -514,47 +517,10 @@ export async function cancelPipelineRun(runId: string): Promise<PipelineRun | nu
     throw new Error('只有运行中的流水线才能取消');
   }
   
-  const now = new Date().toISOString();
-  const client = getSupabaseClient();
+  // 使用 PipelineEngine 取消运行
+  const engine = new PipelineEngine();
+  await engine.cancel(runId);
   
-  // 更新运行状态
-  const { data, error } = await client
-    .from('pipeline_runs')
-    .update({
-      status: 'cancelled',
-      completed_at: now
-    })
-    .eq('id', runId)
-    .select()
-    .single();
-  
-  if (error) {
-    throw new Error(`取消运行失败: ${error.message}`);
-  }
-  
-  // 重置流水线的运行状态
-  await updatePipeline(run.pipeline_id, { run_status: 'idle' });
-  
-  // 更新所有pending和running的节点为skipped
-  await client
-    .from('pipeline_node_runs')
-    .update({ status: 'skipped' })
-    .eq('pipeline_run_id', runId)
-    .in('status', ['pending', 'running']);
-  
-  return {
-    id: data.id,
-    pipeline_id: data.pipeline_id,
-    status: data.status,
-    trigger_by: data.trigger_by,
-    conversation_id: data.conversation_id,
-    total_nodes: data.total_nodes,
-    completed_nodes: data.completed_nodes,
-    failed_nodes: data.failed_nodes,
-    started_at: data.started_at,
-    completed_at: data.completed_at,
-    created_at: data.created_at,
-    input_data: data.input_data,
-    output_data: data.output_data
-  };
+  // 返回更新后的运行记录
+  return await getPipelineRun(runId);
 }

@@ -4,21 +4,25 @@
  */
 
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import type { 
-  Pipeline, 
-  PipelineNode, 
-  PipelineRun, 
+import type {
+  Pipeline,
+  PipelineNode,
+  PipelineRun,
   PipelineNodeRun,
   RunStatus,
   NodeRunStatus,
   MergeStrategy
 } from '@/types/pipeline';
 import type { Conversation } from '@/types/conversation';
+import { buildProjectContextFromProject, injectProjectContext } from '@/lib/project-context';
 
 // 生成唯一ID
 function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
+
+// 用于存储运行中的取消标记
+const cancellationTokens = new Map<string, boolean>();
 
 /**
  * 流水线执行引擎类
@@ -50,6 +54,9 @@ export class PipelineEngine {
     // 3. 创建运行记录
     const run = await this.createRun(pipeline, conversation.id, triggerBy, ticket);
     
+    // 初始化取消标记
+    cancellationTokens.set(run.id, false);
+    
     // 4. 初始化节点运行状态
     await this.initializeNodeRuns(run.id, pipeline.nodes || []);
     
@@ -66,6 +73,44 @@ export class PipelineEngine {
     });
     
     return run;
+  }
+  
+  /**
+   * 取消流水线运行
+   */
+  async cancel(runId: string): Promise<void> {
+    // 设置取消标记
+    cancellationTokens.set(runId, true);
+    
+    // 更新运行状态为已取消
+    await this.client
+      .from('pipeline_runs')
+      .update({
+        status: 'cancelled',
+        ended_at: new Date().toISOString()
+      })
+      .eq('id', runId);
+    
+    // 获取运行记录，获取会话ID
+    const { data: run } = await this.client
+      .from('pipeline_runs')
+      .select('conversation_id')
+      .eq('id', runId)
+      .single();
+    
+    if (run?.conversation_id) {
+      await this.sendSystemMessage(
+        run.conversation_id,
+        '⏸️ 流水线执行已取消'
+      );
+    }
+  }
+  
+  /**
+   * 检查是否已取消
+   */
+  private isCancelled(runId: string): boolean {
+    return cancellationTokens.get(runId) === true;
   }
   
   /**
@@ -429,6 +474,11 @@ export class PipelineEngine {
     conversationId: string,
     pipeline: Pipeline
   ): Promise<void> {
+    // 检查是否已取消
+    if (this.isCancelled(runId)) {
+      throw new Error('流水线已取消');
+    }
+    
     if (!node.agent_id) {
       throw new Error(`节点 ${node.name} 未配置智能体`);
     }
@@ -515,15 +565,84 @@ export class PipelineEngine {
       { node_id: node.id, upstream_outputs: upstreamOutputs, ticket }
     );
     
-    // 构建提示词
-    const prompt = ticket
-      ? `你是一个智能助手，请处理以下工单任务：\n\n${fullDescription}\n\n请根据你的角色和能力，协助完成这个任务。`
-      : `你是一个智能助手，请完成以下任务：\n\n${fullDescription}`;
+    // 获取项目上下文（如果流水线有 project_id）
+    let systemPrompt = agent.system_prompt || '';
+    if (pipeline.project_id) {
+      const { data: project } = await this.client
+        .from('projects')
+        .select('*')
+        .eq('id', pipeline.project_id)
+        .single();
+      
+      if (project) {
+        const projectContext = buildProjectContextFromProject(project);
+        systemPrompt = injectProjectContext(systemPrompt, projectContext);
+      }
+    }
     
-    // TODO: 实际调用智能体执行任务
-    // 这里可以调用 /api/chat 接口或直接调用智能体
-    // 目前模拟执行
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // 构建用户消息
+    const userMessage = ticket
+      ? `请处理以下工单任务：\n\n${fullDescription}\n\n请根据你的角色和能力，协助完成这个任务。完成任务后，请简要汇报你的工作成果。`
+      : `请完成以下任务：\n\n${fullDescription}\n\n完成任务后，请简要汇报你的工作成果。`;
+    
+    // 保存用户消息
+    await this.client
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        agent_id: agent.id,
+        role: 'user',
+        content: userMessage,
+        message_type: 'text'
+      });
+    
+    // 调用智能体执行任务
+    let agentResponse = '';
+    try {
+      // 使用 LLM 调用智能体
+      const { LLMClient, Config } = await import('coze-coding-dev-sdk');
+      const config = new Config();
+      const llmClient = new LLMClient(config);
+      
+      const messages = [
+        { role: 'system' as const, content: systemPrompt },
+        { role: 'user' as const, content: userMessage }
+      ];
+      
+      // 构建LLM配置
+      const llmConfig = {
+        model: agent.model || 'doubao-seed-1-8-251228',
+        temperature: agent.temperature || 0.7,
+        thinking: 'disabled' as const,
+        caching: 'disabled' as const
+      };
+      
+      // 流式读取响应
+      const llmStream = llmClient.stream(messages, llmConfig);
+      for await (const chunk of llmStream) {
+        if (this.isCancelled(runId)) {
+          throw new Error('流水线已取消');
+        }
+        if (chunk.content) {
+          agentResponse += chunk.content.toString();
+        }
+      }
+      
+    } catch (llmError) {
+      console.error('调用智能体失败:', llmError);
+      throw new Error(`智能体调用失败: ${llmError instanceof Error ? llmError.message : '未知错误'}`);
+    }
+    
+    // 保存智能体回复
+    await this.client
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        agent_id: agent.id,
+        role: 'assistant',
+        content: agentResponse || '任务已处理完成',
+        message_type: 'text'
+      });
     
     // 构建输出数据
     const outputData = {
@@ -533,6 +652,7 @@ export class PipelineEngine {
       summary: ticket 
         ? `已处理工单 "${ticket.ticket_title}"`
         : `任务 "${node.name}" 执行完成`,
+      response: agentResponse || '任务已处理完成',
       timestamp: new Date().toISOString(),
       ticket_processed: !!ticket
     };

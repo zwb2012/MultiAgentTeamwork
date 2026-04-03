@@ -9,18 +9,10 @@ export async function POST(
   try {
     const { id } = await params;
     
-    const run = await cancelPipelineRun(id);
-    
-    if (!run) {
-      return NextResponse.json(
-        { success: false, error: '运行记录不存在' },
-        { status: 404 }
-      );
-    }
+    await cancelPipelineRun(id);
     
     return NextResponse.json({ 
-      success: true, 
-      data: run,
+      success: true,
       message: '流水线运行已取消' 
     });
   } catch (error) {
