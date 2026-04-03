@@ -107,6 +107,15 @@ export default function PipelineManagePage() {
 
   const handleStatusChange = async (id: string, action: 'publish' | 'unpublish' | 'archive' | 'restore') => {
     try {
+      // 如果是发布操作，先检查节点数量
+      if (action === 'publish') {
+        const pipeline = pipelines.find(p => p.id === id);
+        if (pipeline && (!pipeline.nodes || pipeline.nodes.length === 0)) {
+          alert('该流水线没有节点，请先在编辑器中添加至少一个节点（开始、智能体等）');
+          return;
+        }
+      }
+      
       const response = await fetch(`/api/pipelines/${id}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

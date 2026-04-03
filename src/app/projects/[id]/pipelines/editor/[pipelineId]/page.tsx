@@ -433,11 +433,26 @@ function PipelineEditorContent() {
       return;
     }
 
+    // 检查是否有节点
+    if (nodes.length === 0) {
+      alert('请先添加至少一个节点（开始、智能体等）才能发布流水线');
+      return;
+    }
+
+    // 检查是否有开始节点
+    const hasStartNode = nodes.some(node => node.data.nodeType === 'start');
+    if (!hasStartNode) {
+      alert('流水线必须有开始节点才能发布');
+      return;
+    }
+
     try {
       setIsPublishing(true);
       
-      const response = await fetch(`/api/pipelines/${pipelineId}/publish`, {
-        method: 'POST'
+      const response = await fetch(`/api/pipelines/${pipelineId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish' })
       });
 
       const result = await response.json();
@@ -450,7 +465,7 @@ function PipelineEditorContent() {
       }
     } catch (error) {
       console.error('发布失败:', error);
-      alert('发布失败');
+      alert('发布失败，请检查网络连接或稍后重试');
     } finally {
       setIsPublishing(false);
     }
