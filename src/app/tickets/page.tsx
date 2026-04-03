@@ -72,7 +72,8 @@ export default function TicketsPage() {
   const router = useRouter();
   
   const [projects, setProjects] = useState<Project[]>([]);
-  const [tickets, setTickets] = useState<any[]>([]);
+  const [allTickets, setAllTickets] = useState<any[]>([]);  // 所有工单，用于统计
+  const [tickets, setTickets] = useState<any[]>([]);  // 当前筛选的工单，用于显示
   const [loading, setLoading] = useState(true);
   
   // 选中的项目
@@ -121,6 +122,7 @@ export default function TicketsPage() {
       }
       
       if (ticketsData.success) {
+        setAllTickets(ticketsData.data);  // 保存所有工单
         setTickets(ticketsData.data);
       }
     } catch (error) {
@@ -183,7 +185,8 @@ export default function TicketsPage() {
           priority: 'medium',
           project_id: ''
         });
-        fetchTickets(selectedProjectId);
+        // 刷新所有工单列表
+        fetchData();
       } else {
         alert('创建失败: ' + result.error);
       }
@@ -261,11 +264,11 @@ export default function TicketsPage() {
                   <TicketIcon className="h-4 w-4" />
                   <span className="font-medium">全部工单</span>
                 </div>
-                <p className="text-xs mt-1 opacity-70">{tickets.length} 个工单</p>
+                <p className="text-xs mt-1 opacity-70">{allTickets.length} 个工单</p>
               </button>
               
               {projects.map(project => {
-                const projectTickets = tickets.filter(t => t.project_id === project.id);
+                const projectTickets = allTickets.filter(t => t.project_id === project.id);
                 return (
                   <button
                     key={project.id}
