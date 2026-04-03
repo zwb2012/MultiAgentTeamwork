@@ -7,11 +7,12 @@
   "git": {
     "user_name": "zwb2012",
     "user_email": "zhuangwen46@163.com",
-    "default_branch": "main"
+    "default_branch": "main",
+    "token": "320f7d1b5f7533fac4299fc44cab4fba:12a993027ac694bbd31d21a774caf325:c070ea1867244c718f0a32cea186099ad64182c342b576e3a1a181e74288a836b54c9915e97f49f9"
   },
   "settings": {
     "auto_health_check": false,
     "health_check_interval": 30
   },
-  "updated_at": "2026-04-02T16:33:16.093Z"
+  "updated_at": "2026-04-03T14:15:04.410Z"
 }
