@@ -381,7 +381,7 @@ export default function TicketDetailPage() {
         <div className="container flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" asChild>
-              <Link href={ticket.project_id ? `/projects/${ticket.project_id}/tickets` : '/tickets'}>
+              <Link href="/tickets">
                 <ArrowLeft className="h-5 w-5" />
               </Link>
             </Button>
