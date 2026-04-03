@@ -53,33 +53,12 @@ export default function PipelineRunsPage() {
 
   const fetchRuns = async () => {
     try {
-      // 获取所有流水线，然后获取每个流水线的运行记录
-      const pipelinesRes = await fetch('/api/pipelines');
-      const pipelinesResult = await pipelinesRes.json();
+      // 直接获取所有运行记录
+      const response = await fetch('/api/pipelines?type=runs');
+      const result = await response.json();
       
-      if (pipelinesResult.success) {
-        const allRuns: PipelineRun[] = [];
-        
-        for (const pipeline of pipelinesResult.data) {
-          const runsRes = await fetch(`/api/pipelines/${pipeline.id}/run`);
-          const runsResult = await runsRes.json();
-          
-          if (runsResult.success) {
-            allRuns.push(...(runsResult.data || []).map((r: PipelineRun) => ({
-              ...r,
-              pipeline_name: pipeline.name,
-              project_id: pipeline.project_id
-            })));
-          }
-        }
-        
-        // 按时间排序
-        allRuns.sort((a, b) => 
-          new Date(b.started_at || b.created_at).getTime() - 
-          new Date(a.started_at || a.created_at).getTime()
-        );
-        
-        setRuns(allRuns);
+      if (result.success) {
+        setRuns(result.data || []);
       }
     } catch (error) {
       console.error('获取运行记录失败:', error);
