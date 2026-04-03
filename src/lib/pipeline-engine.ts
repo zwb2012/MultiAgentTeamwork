@@ -413,6 +413,15 @@ export class PipelineEngine {
       throw new Error(`智能体不存在: ${node.agent_id}`);
     }
     
+    // 获取运行记录（包含工单信息）
+    const { data: run } = await this.client
+      .from('pipeline_runs')
+      .select('input_data')
+      .eq('id', runId)
+      .single();
+    
+    const ticket = run?.input_data as any;
+    
     // 获取上游节点的输出数据
     const upstreamOutputs = await this.getUpstreamOutputs(runId, node);
     
@@ -424,6 +433,17 @@ export class PipelineEngine {
       started_at: new Date().toISOString()
     };
     
+    // 如果有工单信息，添加到输入数据
+    if (ticket) {
+      inputData.ticket = {
+        id: ticket.ticket_id,
+        type: ticket.ticket_type,
+        title: ticket.ticket_title,
+        description: ticket.ticket_description,
+        priority: ticket.ticket_priority
+      };
+    }
+    
     // 更新节点运行记录的输入数据
     await this.client
       .from('pipeline_node_runs')
@@ -431,7 +451,19 @@ export class PipelineEngine {
       .eq('pipeline_run_id', runId)
       .eq('node_id', node.id);
     
-    // 发送开始消息（包含上游信息）
+    // 构建任务描述（包含工单信息）
+    let taskDescription = `任务: ${node.name}`;
+    if (ticket) {
+      taskDescription += `\n\n📋 工单信息:\n`;
+      taskDescription += `- 类型: ${ticket.ticket_type}\n`;
+      taskDescription += `- 标题: ${ticket.ticket_title}\n`;
+      if (ticket.ticket_description) {
+        taskDescription += `- 描述: ${ticket.ticket_description}\n`;
+      }
+      taskDescription += `- 优先级: ${ticket.ticket_priority}`;
+    }
+    
+    // 添加上游信息
     const upstreamSummary = Object.keys(upstreamOutputs).length > 0
       ? `\n\n📋 上游节点输出:\n${Object.entries(upstreamOutputs)
           .map(([nodeId, output]) => {
@@ -441,13 +473,21 @@ export class PipelineEngine {
           .join('\n')}`
       : '';
     
+    const fullDescription = taskDescription + upstreamSummary;
+    
+    // 发送开始消息（包含工单信息）
     await this.sendMessage(
       conversationId,
       agent.id,
       'task_start',
-      `🤖 ${agent.name} 开始执行任务: ${node.name}${upstreamSummary}`,
-      { node_id: node.id, upstream_outputs: upstreamOutputs }
+      `🤖 ${agent.name} 开始执行:\n${fullDescription}`,
+      { node_id: node.id, upstream_outputs: upstreamOutputs, ticket }
     );
+    
+    // 构建提示词
+    const prompt = ticket
+      ? `你是一个智能助手，请处理以下工单任务：\n\n${fullDescription}\n\n请根据你的角色和能力，协助完成这个任务。`
+      : `你是一个智能助手，请完成以下任务：\n\n${fullDescription}`;
     
     // TODO: 实际调用智能体执行任务
     // 这里可以调用 /api/chat 接口或直接调用智能体
@@ -459,8 +499,11 @@ export class PipelineEngine {
       agent_id: agent.id,
       agent_name: agent.name,
       status: 'completed',
-      summary: `任务 "${node.name}" 执行完成`,
-      timestamp: new Date().toISOString()
+      summary: ticket 
+        ? `已处理工单 "${ticket.ticket_title}"`
+        : `任务 "${node.name}" 执行完成`,
+      timestamp: new Date().toISOString(),
+      ticket_processed: !!ticket
     };
     
     // 更新节点运行记录的输出数据
@@ -475,7 +518,7 @@ export class PipelineEngine {
       conversationId,
       agent.id,
       'task_complete',
-      `✅ ${agent.name} 完成任务: ${node.name}`,
+      `✅ ${agent.name} 完成:\n${outputData.summary}`,
       { node_id: node.id, output: outputData }
     );
     

@@ -13,6 +13,7 @@ import type {
   PipelineRunStatus,
   TicketInput 
 } from '@/types/pipeline';
+import { PipelineEngine } from './pipeline-engine';
 
 // 生成唯一ID
 function generateId(): string {
@@ -386,65 +387,29 @@ export async function runPipeline(id: string, ticket?: TicketInput): Promise<Pip
   if (pipeline.run_status === 'running') {
     throw new Error('流水线正在运行中，请等待执行完成');
   }
+
+  // 使用 PipelineEngine 执行流水线
+  const engine = new PipelineEngine();
+  const run = await engine.run(id, 'manual');
   
-  const client = getSupabaseClient();
-  const runId = generateId();
-  const now = new Date().toISOString();
-  
-  // 更新流水线运行状态
-  await updatePipeline(id, { run_status: 'running' });
-  
-  // 创建运行记录
-  const { data: run, error } = await client
-    .from('pipeline_runs')
-    .insert({
-      id: runId,
-      pipeline_id: id,
-      status: 'running',
-      trigger_by: 'manual',
-      total_nodes: pipeline.nodes?.length || 0,
-      completed_nodes: 0,
-      failed_nodes: 0,
-      started_at: now,
-      created_at: now,
-      input_data: ticket ? {
-        ticket_id: ticket.id,
-        ticket_type: ticket.type,
-        ticket_title: ticket.title,
-        ticket_description: ticket.description,
-        ticket_priority: ticket.priority
-      } : undefined
-    })
-    .select()
-    .single();
-  
-  if (error || !run) {
-    await updatePipeline(id, { run_status: 'idle' });
-    throw new Error(`创建运行记录失败: ${error?.message}`);
+  // 如果有工单信息，更新运行记录
+  if (ticket) {
+    const client = getSupabaseClient();
+    await client
+      .from('pipeline_runs')
+      .update({
+        input_data: {
+          ticket_id: ticket.id,
+          ticket_type: ticket.type,
+          ticket_title: ticket.title,
+          ticket_description: ticket.description,
+          ticket_priority: ticket.priority
+        }
+      })
+      .eq('id', run.id);
   }
   
-  // TODO: 异步执行流水线（实际生产环境应该用消息队列）
-  // 这里暂时只是创建运行记录，实际执行由 pipeline-engine 处理
-  
-  return {
-    id: runId,
-    pipeline_id: id,
-    status: 'running',
-    trigger_by: 'manual',
-    ticket_id: ticket?.id,
-    ticket_type: ticket?.type,
-    total_nodes: pipeline.nodes?.length || 0,
-    completed_nodes: 0,
-    failed_nodes: 0,
-    started_at: now,
-    created_at: now,
-    input_data: ticket ? {
-      ticket_id: ticket.id,
-      ticket_type: ticket.type,
-      ticket_title: ticket.title,
-      ticket_description: ticket.description
-    } : undefined
-  };
+  return run;
 }
 
 /**
