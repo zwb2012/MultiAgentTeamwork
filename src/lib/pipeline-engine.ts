@@ -652,9 +652,17 @@ export class PipelineEngine {
           .single();
 
         if (config) {
-          apiKey = config.api_key ? await decrypt(config.api_key) : undefined;
+          const decryptedKey = config.api_key ? await decrypt(config.api_key) : undefined;
+          apiKey = decryptedKey;
           baseUrl = config.base_url || undefined;
           modelName = config.default_model || 'doubao-seed-1-8-251228';
+          console.log('[PipelineEngine] 从 model_config_id 加载配置:', {
+            model_config_id: agent.model_config_id,
+            modelName,
+            baseUrl,
+            hasApiKey: !!apiKey,
+            apiKeyLength: decryptedKey?.length
+          });
         }
       }
 
@@ -680,13 +688,27 @@ export class PipelineEngine {
         model: modelName,
         temperature: agentModelConfig.temperature || 0.7,
         thinking: agentModelConfig.thinking || 'disabled' as const,
-        caching: agentModelConfig.caching || 'disabled' as const,
-        api_key: apiKey,
-        base_url: baseUrl
+        caching: agentModelConfig.caching || 'disabled' as const
       };
 
-      const config = new Config();
-      const llmClient = new LLMClient(config);
+      console.log('[PipelineEngine] LLM配置:', {
+        model: modelName,
+        baseUrl,
+        hasApiKey: !!apiKey,
+        agentId: agent.id,
+        agentName: agent.name
+      });
+
+      // 使用环境变量设置 API 配置
+      // 注意：SDK 需要通过环境变量设置 API Key 和 Base URL，而不是通过 Config 构造函数
+      process.env.OPENAI_API_KEY = apiKey;
+      if (baseUrl) {
+        process.env.OPENAI_BASE_URL = baseUrl;
+      }
+
+      // 创建 Config（使用环境变量）
+      const sdkConfig = new Config();
+      const llmClient = new LLMClient(sdkConfig);
 
       // 流式读取响应
       const llmStream = llmClient.stream(messages, llmConfig);
