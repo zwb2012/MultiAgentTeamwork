@@ -4,13 +4,13 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, Code, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { defaultConfig, countLines, shouldAutoMinimize, shouldAutoSectionFold, shouldAutoTruncate } from '@/lib/message-content-config';
+import { countLines, shouldAutoMinimize, shouldAutoSectionFold, shouldAutoTruncate } from '@/lib/message-content-config';
+import { useMessageConfig } from '@/contexts/MessageConfigContext';
 
 interface MessageContentProps {
   content: string;
   maxLength?: number;
   isStreaming?: boolean;
-  config?: any; // 可选的自定义配置
 }
 
 interface Section {
@@ -20,9 +20,9 @@ interface Section {
   id: string;
 }
 
-export function MessageContent({ content, maxLength, isStreaming = false, config = defaultConfig }: MessageContentProps) {
-  // 使用传入的配置或默认配置
-  const finalConfig = config;
+export function MessageContent({ content, maxLength, isStreaming = false }: MessageContentProps) {
+  // 从全局配置获取消息折叠配置
+  const finalConfig = useMessageConfig();
 
   // 检查内容是否包含代码块
   const hasCodeBlock = /```[\s\S]*?```/.test(content);
@@ -366,7 +366,7 @@ function SectionItem({ section, isExpanded, onToggle }: { section: Section; isEx
 // 渲染 Markdown 内容
 function renderMarkdown(text: string) {
   const lines = text.split('\n');
-  const renderedElements: JSX.Element[] = [];
+  const renderedElements: React.ReactElement[] = [];
   let i = 0;
 
   while (i < lines.length) {

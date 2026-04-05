@@ -359,26 +359,7 @@ export class SkillEnhancedChat {
               }
             }
           }
-                model: targetAgent.model || 'doubao-seed-1-8-251228',
-                temperature: 0.7,
-                thinking: 'disabled',
-                caching: 'disabled'
-              });
 
-              for await (const chunk of followUpStream) {
-                if (chunk.content) {
-                  const text = chunk.content.toString();
-                  fullResponse += text;
-
-                  const data = JSON.stringify({
-                    content: text,
-                    agent_id: targetAgent.id,
-                    agent_name: targetAgent.name
-                  });
-                  controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-                }
-              }
-            }
           // 保存AI回复
           await this.saveMessage(
             conversation_id,

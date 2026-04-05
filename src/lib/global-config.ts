@@ -18,7 +18,7 @@ export interface GlobalConfig {
     default_base_url: string;
     default_model: string;
   };
-  
+
   // Git 配置
   git: {
     user_name: string;        // Git 用户名
@@ -26,13 +26,25 @@ export interface GlobalConfig {
     default_branch: string;   // 默认分支
     token?: string;           // 全局 Git Token（加密存储）
   };
-  
+
   // 其他配置
   settings: {
     auto_health_check: boolean;  // 创建智能体后自动检测
     health_check_interval: number; // 自动检测间隔（分钟）
   };
-  
+
+  // UI 显示配置
+  ui: {
+    message: {
+      collapseMode: 'default' | 'compact' | 'loose' | 'custom';
+      customThresholds?: {
+        autoMinimize: { charCount: number; lineCount: number };
+        autoSectionFold: { charCount: number; lineCount: number };
+        autoTruncate: { charCount: number; lineCount: number };
+      };
+    };
+  };
+
   // 更新时间
   updated_at?: string;
 }
@@ -53,6 +65,12 @@ const DEFAULT_CONFIG: GlobalConfig = {
   settings: {
     auto_health_check: true,
     health_check_interval: 30
+  },
+  // UI 显示配置
+  ui: {
+    message: {
+      collapseMode: 'default'
+    }
   }
 };
 
@@ -87,22 +105,33 @@ export function saveGlobalConfig(config: Partial<GlobalConfig>): GlobalConfig {
     ...config,
     updated_at: new Date().toISOString()
   };
-  
+
   // 保存LLM配置
   if (config.llm) {
     newConfig.llm = { ...currentConfig.llm, ...config.llm };
   }
-  
+
   // 保存 Git 配置
   if (config.git) {
     newConfig.git = { ...currentConfig.git, ...config.git };
   }
-  
+
   // 保存设置
   if (config.settings) {
     newConfig.settings = { ...currentConfig.settings, ...config.settings };
   }
-  
+
+  // 保存 UI 配置
+  if (config.ui) {
+    newConfig.ui = {
+      ...currentConfig.ui,
+      message: {
+        ...currentConfig.ui.message,
+        ...config.ui.message
+      }
+    };
+  }
+
   try {
     fs.writeFileSync(GLOBAL_CONFIG_FILE, JSON.stringify(newConfig, null, 2), 'utf-8');
     return newConfig;

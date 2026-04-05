@@ -1,6 +1,6 @@
 /**
  * 消息内容折叠配置
- * 可根据实际需求调整这些阈值
+ * 从 global-config.ts 读取实际配置，此文件提供预设配置和工具函数
  */
 
 export interface MessageContentConfig {
@@ -29,83 +29,82 @@ export interface MessageContentConfig {
   autoFoldExpandedSections: number;     // 自动折叠模式下默认展开的章节数
 }
 
-/**
- * 默认配置
- * 针对中英文混合场景优化
- */
-export const defaultConfig: MessageContentConfig = {
-  // 自动最小化：超过 500字符 或 15 行
-  autoMinimize: {
-    charCount: 500,
-    lineCount: 15,
+// 预设配置
+export const presetConfigs = {
+  // 默认配置：平衡模式
+  default: {
+    autoMinimize: { charCount: 500, lineCount: 15 },
+    autoSectionFold: { charCount: 200, lineCount: 8 },
+    autoTruncate: { charCount: 80, lineCount: 3 },
+    collapsedPreviewLength: 60,
+    defaultMaxLength: 80,
+    codeBlockMaxLength: 300,
+    aggressiveTruncateLength: 150,
+    defaultExpandedSections: 3,
+    autoFoldExpandedSections: 1,
   },
-
-  // 自动章节折叠：超过 200字符 或 8 行，且包含标题
-  autoSectionFold: {
-    charCount: 200,
-    lineCount: 8,
+  // 紧凑配置：更早触发折叠
+  compact: {
+    autoMinimize: { charCount: 300, lineCount: 10 },
+    autoSectionFold: { charCount: 150, lineCount: 5 },
+    autoTruncate: { charCount: 60, lineCount: 2 },
+    collapsedPreviewLength: 50,
+    defaultMaxLength: 60,
+    codeBlockMaxLength: 200,
+    aggressiveTruncateLength: 100,
+    defaultExpandedSections: 2,
+    autoFoldExpandedSections: 1,
   },
-
-  // 自动截断折叠：超过 80字符 或 3 行
-  autoTruncate: {
-    charCount: 80,
-    lineCount: 3,
+  // 宽松配置：更晚触发折叠
+  loose: {
+    autoMinimize: { charCount: 800, lineCount: 25 },
+    autoSectionFold: { charCount: 400, lineCount: 15 },
+    autoTruncate: { charCount: 150, lineCount: 5 },
+    collapsedPreviewLength: 80,
+    defaultMaxLength: 150,
+    codeBlockMaxLength: 500,
+    aggressiveTruncateLength: 200,
+    defaultExpandedSections: 4,
+    autoFoldExpandedSections: 2,
   },
-
-  // 折叠显示长度
-  collapsedPreviewLength: 60,    // 最小化时显示 60 字符
-  defaultMaxLength: 80,          // 普通消息截断 80 字符
-  codeBlockMaxLength: 300,       // 包含代码块时截断 300 字符
-  aggressiveTruncateLength: 150, // 激进模式截断 150 字符
-
-  // 章节折叠默认展开数量
-  defaultExpandedSections: 3,   // 正常模式展开 3 个章节
-  autoFoldExpandedSections: 1,  // 自动折叠模式展开 1 个章节
-};
-
-/**
- * 紧凑模式配置
- * 适用于需要更紧凑显示的场景
- */
-export const compactConfig: MessageContentConfig = {
-  ...defaultConfig,
-  autoMinimize: {
-    charCount: 300,  // 降低到 300 字符
-    lineCount: 10,   // 降低到 10 行
-  },
-  autoSectionFold: {
-    charCount: 150,  // 降低到 150 字符
-    lineCount: 5,    // 降低到 5 行
-  },
-  autoTruncate: {
-    charCount: 60,   // 降低到 60 字符
-    lineCount: 2,    // 降低到 2 行
-  },
-  defaultExpandedSections: 2,
-  autoFoldExpandedSections: 1,
-};
+} as const;
 
 /**
- * 宽松模式配置
- * 适用于需要显示更多内容的场景
+ * 根据 global-config 的 UI 配置获取实际使用的配置
  */
-export const looseConfig: MessageContentConfig = {
-  ...defaultConfig,
-  autoMinimize: {
-    charCount: 800,  // 提高到 800 字符
-    lineCount: 25,   // 提高到 25 行
-  },
-  autoSectionFold: {
-    charCount: 400,  // 提高到 400 字符
-    lineCount: 15,   // 提高到 15 行
-  },
-  autoTruncate: {
-    charCount: 150,  // 提高到 150 字符
-    lineCount: 5,    // 提高到 5 行
-  },
-  defaultExpandedSections: 4,
-  autoFoldExpandedSections: 2,
-};
+export function getConfigFromGlobal(uiConfig?: {
+  message: {
+    collapseMode: 'default' | 'compact' | 'loose' | 'custom';
+    customThresholds?: any;
+  };
+}): MessageContentConfig {
+  if (!uiConfig) return presetConfigs.default;
+
+  const { collapseMode, customThresholds } = uiConfig.message;
+
+  // 自定义模式
+  if (collapseMode === 'custom' && customThresholds) {
+    return {
+      autoMinimize: customThresholds.autoMinimize,
+      autoSectionFold: customThresholds.autoSectionFold,
+      autoTruncate: customThresholds.autoTruncate,
+      collapsedPreviewLength: customThresholds.collapsedPreviewLength ?? 60,
+      defaultMaxLength: customThresholds.defaultMaxLength ?? 80,
+      codeBlockMaxLength: customThresholds.codeBlockMaxLength ?? 300,
+      aggressiveTruncateLength: customThresholds.aggressiveTruncateLength ?? 150,
+      defaultExpandedSections: customThresholds.defaultExpandedSections ?? 3,
+      autoFoldExpandedSections: customThresholds.autoFoldExpandedSections ?? 1,
+    };
+  }
+
+  // 预设模式（custom 模式不使用 presetConfigs）
+  if (collapseMode !== 'custom') {
+    return presetConfigs[collapseMode as keyof typeof presetConfigs] || presetConfigs.default;
+  }
+
+  // 如果是 custom 模式但没有自定义阈值，返回默认配置
+  return presetConfigs.default;
+}
 
 /**
  * 计算行数

@@ -6,15 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Settings as SettingsIcon, 
+import {
+  Settings as SettingsIcon,
   Save,
   Loader2,
   Activity,
   GitBranch,
   Eye,
-  EyeOff
+  EyeOff,
+  MessageSquare
 } from 'lucide-react';
+import { presetConfigs } from '@/lib/message-content-config';
 
 interface GitConfig {
   user_name: string;
@@ -28,6 +30,15 @@ interface SettingsConfig {
   health_check_interval: number;
 }
 
+interface MessageUIConfig {
+  collapseMode: 'default' | 'compact' | 'loose' | 'custom';
+  customThresholds?: {
+    autoMinimize: { charCount: number; lineCount: number };
+    autoSectionFold: { charCount: number; lineCount: number };
+    autoTruncate: { charCount: number; lineCount: number };
+  };
+}
+
 export default function SettingsPage() {
   const [gitConfig, setGitConfig] = useState<GitConfig>({
     user_name: 'AI Agent',
@@ -35,12 +46,16 @@ export default function SettingsPage() {
     default_branch: 'main',
     token: ''
   });
-  
+
   const [settings, setSettings] = useState<SettingsConfig>({
     auto_health_check: true,
     health_check_interval: 30
   });
-  
+
+  const [messageUI, setMessageUI] = useState<MessageUIConfig>({
+    collapseMode: 'default'
+  });
+
   const [isSaving, setIsSaving] = useState(false);
   const [showToken, setShowToken] = useState(false);
 
@@ -52,7 +67,7 @@ export default function SettingsPage() {
     try {
       const response = await fetch('/api/config');
       const result = await response.json();
-      
+
       if (result.success) {
         if (result.data.git) {
           setGitConfig({
@@ -65,6 +80,10 @@ export default function SettingsPage() {
         if (result.data.settings) {
           setSettings(result.data.settings);
         }
+        // 读取 UI 配置
+        if (result.data.ui?.message) {
+          setMessageUI(result.data.ui.message);
+        }
       }
     } catch (error) {
       console.error('获取配置失败:', error);
@@ -73,19 +92,20 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     setIsSaving(true);
-    
+
     try {
       const response = await fetch('/api/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           git: gitConfig,
-          settings: settings
+          settings: settings,
+          ui: { message: messageUI }
         })
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         alert('配置已保存');
         fetchConfig();
@@ -229,7 +249,7 @@ export default function SettingsPage() {
               })}
             />
           </div>
-          
+
           <div className="space-y-2">
             <Label>自动检测间隔（分钟）</Label>
             <Input
@@ -238,14 +258,228 @@ export default function SettingsPage() {
               max={1440}
               value={settings.health_check_interval}
               onChange={(e) => setSettings({
-                ...settings, 
-                health_check_interval: parseInt(e.target.value) || 30 
+                ...settings,
+                health_check_interval: parseInt(e.target.value) || 30
               })}
             />
             <p className="text-xs text-muted-foreground">
               0 表示禁用自动检测
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 消息显示设置 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            消息显示设置
+          </CardTitle>
+          <CardDescription>
+            配置聊天消息的折叠和显示行为
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* 折叠模式选择 */}
+          <div className="space-y-2">
+            <Label>折叠模式</Label>
+            <div className="grid grid-cols-4 gap-2">
+              <Button
+                type="button"
+                variant={messageUI.collapseMode === 'default' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMessageUI({
+                  ...messageUI,
+                  collapseMode: 'default',
+                  customThresholds: undefined
+                })}
+              >
+                默认
+              </Button>
+              <Button
+                type="button"
+                variant={messageUI.collapseMode === 'compact' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMessageUI({
+                  ...messageUI,
+                  collapseMode: 'compact',
+                  customThresholds: undefined
+                })}
+              >
+                紧凑
+              </Button>
+              <Button
+                type="button"
+                variant={messageUI.collapseMode === 'loose' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setMessageUI({
+                  ...messageUI,
+                  collapseMode: 'loose',
+                  customThresholds: undefined
+                })}
+              >
+                宽松
+              </Button>
+              <Button
+                type="button"
+                variant={messageUI.collapseMode === 'custom' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  const defaults = presetConfigs.default;
+                  setMessageUI({
+                    collapseMode: 'custom',
+                    customThresholds: {
+                      autoMinimize: { ...defaults.autoMinimize },
+                      autoSectionFold: { ...defaults.autoSectionFold },
+                      autoTruncate: { ...defaults.autoTruncate }
+                    }
+                  });
+                }}
+              >
+                自定义
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {messageUI.collapseMode === 'default' && '平衡模式，适合大多数场景'}
+              {messageUI.collapseMode === 'compact' && '紧凑模式，消息更早折叠'}
+              {messageUI.collapseMode === 'loose' && '宽松模式，显示更多内容'}
+              {messageUI.collapseMode === 'custom' && '自定义模式，可调整阈值'}
+            </p>
+          </div>
+
+          {/* 自定义阈值（仅在自定义模式下显示） */}
+          {messageUI.collapseMode === 'custom' && messageUI.customThresholds && (
+            <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
+              <Label className="text-sm font-medium">自定义阈值</Label>
+
+              {/* 自动最小化 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">最小化字符数</Label>
+                  <Input
+                    type="number"
+                    min={100}
+                    max={2000}
+                    value={messageUI.customThresholds.autoMinimize.charCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoMinimize: {
+                          ...messageUI.customThresholds!.autoMinimize,
+                          charCount: parseInt(e.target.value) || 500
+                        }
+                      }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">最小化行数</Label>
+                  <Input
+                    type="number"
+                    min={5}
+                    max={50}
+                    value={messageUI.customThresholds.autoMinimize.lineCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoMinimize: {
+                          ...messageUI.customThresholds!.autoMinimize,
+                          lineCount: parseInt(e.target.value) || 15
+                        }
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+
+              {/* 自动章节折叠 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">章节折叠字符数</Label>
+                  <Input
+                    type="number"
+                    min={50}
+                    max={1000}
+                    value={messageUI.customThresholds.autoSectionFold.charCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoSectionFold: {
+                          ...messageUI.customThresholds!.autoSectionFold,
+                          charCount: parseInt(e.target.value) || 200
+                        }
+                      }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">章节折叠行数</Label>
+                  <Input
+                    type="number"
+                    min={3}
+                    max={30}
+                    value={messageUI.customThresholds.autoSectionFold.lineCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoSectionFold: {
+                          ...messageUI.customThresholds!.autoSectionFold,
+                          lineCount: parseInt(e.target.value) || 8
+                        }
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+
+              {/* 自动截断 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs">截断字符数</Label>
+                  <Input
+                    type="number"
+                    min={30}
+                    max={500}
+                    value={messageUI.customThresholds.autoTruncate.charCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoTruncate: {
+                          ...messageUI.customThresholds!.autoTruncate,
+                          charCount: parseInt(e.target.value) || 80
+                        }
+                      }
+                    })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">截断行数</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={messageUI.customThresholds.autoTruncate.lineCount}
+                    onChange={(e) => setMessageUI({
+                      ...messageUI,
+                      customThresholds: {
+                        ...messageUI.customThresholds!,
+                        autoTruncate: {
+                          ...messageUI.customThresholds!.autoTruncate,
+                          lineCount: parseInt(e.target.value) || 3
+                        }
+                      }
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
