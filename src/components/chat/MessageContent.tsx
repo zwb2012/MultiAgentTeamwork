@@ -10,20 +10,39 @@ interface MessageContentProps {
   isStreaming?: boolean;
 }
 
-const DEFAULT_MAX_LENGTH = 300; // 默认截断长度
+const DEFAULT_MAX_LENGTH = 100; // 默认截断长度
+const CODEBLOCK_MAX_LENGTH = 500; // 包含代码块时的截断长度
+const AGGRESSIVE_TRUNCATE_LENGTH = 200; // 激进模式截断长度
 
 export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStreaming = false }: MessageContentProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   // 检查内容是否包含代码块
   const hasCodeBlock = /```[\s\S]*?```/.test(content);
-  
+
+  // 计算非代码块部分的长度
+  const getCodeBlockCount = (text: string) => (text.match(/```[\s\S]*?```/g) || []).length;
+  const getNonCodeLength = (text: string) => {
+    // 移除所有代码块，计算剩余文本长度
+    return text.replace(/```[\s\S]*?```/g, '').length;
+  };
+
+  // 根据是否有代码块，使用不同的折叠策略
+  const codeBlockCount = getCodeBlockCount(content);
+  const nonCodeLength = getNonCodeLength(content);
+
+  // 如果有多个代码块或者非代码部分很长，使用更激进的折叠
+  const useAggressiveTruncate = codeBlockCount >= 3 || nonCodeLength > AGGRESSIVE_TRUNCATE_LENGTH;
+  const effectiveMaxLength = hasCodeBlock
+    ? (useAggressiveTruncate ? 300 : CODEBLOCK_MAX_LENGTH)
+    : maxLength;
+
   // 检查是否需要截断
-  const shouldTruncate = !isExpanded && !isStreaming && content.length > maxLength && !hasCodeBlock;
-  const displayContent = shouldTruncate ? content.slice(0, maxLength) + '...' : content;
-  
+  const shouldTruncate = !isExpanded && !isStreaming && content.length > effectiveMaxLength;
+  const displayContent = shouldTruncate ? content.slice(0, effectiveMaxLength) + '\n\n... (点击展开查看更多)' : content;
+
   // 检查是否需要显示展开按钮
-  const needsExpandButton = content.length > maxLength && !hasCodeBlock;
+  const needsExpandButton = content.length > effectiveMaxLength && !isStreaming;
   
   // 处理复制功能
   const [copied, setCopied] = useState(false);
@@ -36,41 +55,68 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   // 渲染 Markdown 内容
   const renderMarkdown = (text: string) => {
     // 简单的 Markdown 渲染，实际项目可以使用 react-markdown
-    return text.split('\n').map((line, index) => {
+    const lines = text.split('\n');
+    const renderedElements: JSX.Element[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const index = i;
+
       // 代码块
       if (line.startsWith('```')) {
         const codeBlock = extractCodeBlock(text, index);
         if (codeBlock) {
-          return renderCodeBlock(codeBlock.content, codeBlock.language);
+          renderedElements.push(
+            <div key={`code-${index}`}>{renderCodeBlock(codeBlock.content, codeBlock.language)}</div>
+          );
+          // 跳过代码块的所有行
+          i += codeBlock.content.split('\n').length + 2; // +2 for opening and closing ```
+          continue;
         }
       }
-      
+
       // 内联代码
-      if (line.includes('`')) {
-        return renderInlineCode(line);
+      if (line.includes('`') && !line.startsWith('```')) {
+        renderedElements.push(<div key={`inline-${index}`}>{renderInlineCode(line)}</div>);
+        i++;
+        continue;
       }
-      
+
       // 空行
       if (line.trim() === '') {
-        return <br key={index} />;
+        renderedElements.push(<br key={`br-${index}`} />);
+        i++;
+        continue;
       }
-      
+
       // 列表
       if (line.match(/^\s*[-*+]\s+/) || line.match(/^\s*\d+\.\s+/)) {
-        return <li key={index} className="ml-4">{line.replace(/^\s*[-*+]\s+|\s*\d+\.\s+/, '')}</li>;
+        renderedElements.push(
+          <li key={`list-${index}`} className="ml-4">{line.replace(/^\s*[-*+]\s+|\s*\d+\.\s+/, '')}</li>
+        );
+        i++;
+        continue;
       }
-      
+
       // 标题
       if (line.startsWith('#')) {
         const level = line.match(/^#+/)?.[0].length || 1;
         const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
         const text = line.replace(/^#+\s*/, '');
-        return <Tag key={index} className={`font-semibold mt-2 mb-1 text-${level}`}>{text}</Tag>;
+        renderedElements.push(
+          <Tag key={`heading-${index}`} className={`font-semibold mt-2 mb-1 text-${level}`}>{text}</Tag>
+        );
+        i++;
+        continue;
       }
-      
+
       // 普通段落
-      return <p key={index} className="my-1">{line}</p>;
-    });
+      renderedElements.push(<p key={`para-${index}`} className="my-1">{line}</p>);
+      i++;
+    }
+
+    return renderedElements;
   };
   
   // 提取代码块
