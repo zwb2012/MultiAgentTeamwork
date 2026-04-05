@@ -581,18 +581,20 @@ export default function ConversationsPage() {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-sm font-medium truncate">{agent.name}</span>
-                                  {agent.project_id && (
-                                    <span className="text-xs text-muted-foreground">
-                                      ({projects.find(p => p.id === agent.project_id)?.name || '未知项目'})
-                                    </span>
+                                  {agent.project_id ? (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                      {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                      全局
+                                    </Badge>
                                   )}
-                                  {!agent.project_id && (
-                                    <span className="text-xs text-muted-foreground">
-                                      (全局)
-                                    </span>
-                                  )}
+                                  <span className="text-[10px] text-muted-foreground">
+                                    {getRoleLabel(agent.role)}
+                                  </span>
                                 </div>
                               </div>
                               <span className={cn("w-2 h-2 rounded-full", statusColor)} />
@@ -953,20 +955,19 @@ export default function ConversationsPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-medium">{agent.name}</span>
-                                {agent.project_id && (
-                                  <span className="text-xs text-muted-foreground">
-                                    ({projects.find(p => p.id === agent.project_id)?.name || '未知项目'})
-                                  </span>
-                                )}
-                                {!agent.project_id && (
-                                  <span className="text-xs text-muted-foreground">
-                                    (全局)
-                                  </span>
+                                {agent.project_id ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                    {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                    全局
+                                  </Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-muted-foreground">{agent.role}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">{getRoleLabel(agent.role)}</div>
                             </div>
                           </div>
                           <Button
@@ -1018,21 +1019,22 @@ export default function ConversationsPage() {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-sm truncate">{agent.name}</span>
-                                  {agent.project_id && (
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                      ({projects.find(p => p.id === agent.project_id)?.name || '未知项目'})
-                                    </span>
-                                  )}
-                                  {!agent.project_id && (
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                      (全局)
-                                    </span>
+                                  {agent.project_id ? (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                      {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                      全局
+                                    </Badge>
                                   )}
                                 </div>
                               </div>
-                              <Badge variant="outline" className="text-xs">{agent.role}</Badge>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                {getRoleLabel(agent.role)}
+                              </Badge>
                             </div>
                           ))}
                       </div>
