@@ -247,7 +247,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         {/* 导航菜单 */}
-        <nav className="p-2 space-y-1">
+        <nav className="p-2 space-y-1 overflow-y-auto" style={{ height: 'calc(100vh - 64px)' }}>
           {navItems.map((item) => (
             <div key={item.title}>
               {/* 有子菜单的项 */}
