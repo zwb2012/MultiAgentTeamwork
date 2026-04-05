@@ -362,7 +362,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * 处理多智能体协调
- * 使用协调者模式，让协调者LLM串行调用其他智能体并整合输出
+ * 让每个智能体分别显示它们的回复，协调者负责调度和总结
  */
 async function handleMultipleAgentsWithCoordinator(
   mentionedAgents: Agent[],
@@ -385,14 +385,6 @@ async function handleMultipleAgentsWithCoordinator(
     )
   );
 
-  // 获取历史消息
-  const { data: historyMessages } = await client
-    .from('messages')
-    .select('*')
-    .eq('conversation_id', conversation_id)
-    .order('created_at', { ascending: true })
-    .limit(10);
-
   // 保存用户消息（使用第一个智能体的ID）
   await client
     .from('messages')
@@ -403,70 +395,204 @@ async function handleMultipleAgentsWithCoordinator(
       content: user_message,
       message_type: 'text',
       metadata: {
-        mentioned_agents: mentionedAgents.map(a => a.id),
-        coordinator_mode: true
+        mentioned_agents: mentionedAgents.map(a => a.id)
       }
     });
 
   try {
-    // 创建协调者
-    const { AgentCoordinator } = await import('@/lib/chat/coordinator');
-    const { getEffectiveAPIConfig } = await import('@/lib/global-config');
-
-    // 初始化LLM客户端
-    const config = new Config();
-    const customHeaders = {}; // 不需要转发headers，因为我们在调用时会设置环境变量
-    const llmClient = new LLMClient(config, customHeaders);
-
-    const coordinator = new AgentCoordinator(llmClient);
-
-    // 使用协调者协调多个智能体
-    const stream = await coordinator.coordinate(
-      user_message,
-      mentionedAgents,
-      projectContext,
-      historyMessages || []
-    );
-
-    // 创建包装流，用于保存响应和更新状态
+    // 创建流式响应
     const wrapperStream = new ReadableStream({
       async start(controller) {
-        let fullResponse = '';
-
         try {
-          const reader = stream.getReader();
+          // 步骤1: 协调者分析任务并发送开始消息
+          const coordinatorPrompt = `你是一个智能体协调者。分析用户需求，决定需要哪些智能体参与以及调用的顺序。
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+可用智能体:
+${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
 
-            if (value) {
-              const text = value.toString();
-              fullResponse += text;
-              // 转换为SSE格式
-              const sseData = JSON.stringify({
-                content: text,
-                agent_id: mentionedAgents[0].id,
-                agent_name: '协调者',
-                coordinator_mode: true
-              });
-              controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
+用户需求: ${user_message}
+
+请以JSON格式输出分析结果，格式如下:
+\`\`\`json
+{
+  "analysis": "任务分析",
+  "calls": [
+    {"agent_id": "xxx", "agent_name": "xxx", "query": "询问智能体的具体问题"}
+  ]
+}
+\`\`\``;
+
+          const { getEffectiveAPIConfig } = await import('@/lib/global-config');
+          const config = new Config();
+          const llmClient = new LLMClient(config);
+
+          const coordinatorStream = llmClient.stream(
+            [
+              { role: 'system', content: coordinatorPrompt },
+              { role: 'user', content: user_message }
+            ],
+            {
+              model: 'doubao-seed-1-8-251228',
+              temperature: 0.3,
+              thinking: 'disabled',
+              caching: 'disabled'
+            }
+          );
+
+          let coordinatorAnalysis = '';
+          for await (const chunk of coordinatorStream) {
+            if (chunk.content) {
+              coordinatorAnalysis += chunk.content.toString();
             }
           }
 
-          // 保存协调者的响应
+          // 解析协调者的分析
+          const jsonMatch = coordinatorAnalysis.match(/```json\s*([\s\S]*?)```/);
+          let agentCalls: any[] = [];
+
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[1]);
+              agentCalls = parsed.calls || [];
+            } catch (e) {
+              console.error('解析协调者分析失败:', e);
+            }
+          }
+
+          // 如果解析失败，默认调用所有智能体
+          if (agentCalls.length === 0) {
+            agentCalls = mentionedAgents.map(agent => ({
+              agent_id: agent.id,
+              agent_name: agent.name,
+              query: user_message
+            }));
+          }
+
+          // 发送协调者的分析消息
+          const analysisMsg = `🤖 协调者正在协调 ${mentionedAgents.length} 个智能体...\n\n任务分析: ${coordinatorAnalysis.replace(/```json[\s\S]*?```/g, '').trim()}`;
+          const analysisSSE = JSON.stringify({
+            type: 'coordinator',
+            agent_name: '协调者',
+            content: analysisMsg,
+            coordinator_mode: true
+          });
+          controller.enqueue(encoder.encode(`data: ${analysisSSE}\n\n`));
+
+          // 保存协调者分析消息
           await client
             .from('messages')
             .insert({
               conversation_id,
               agent_id: mentionedAgents[0].id,
               role: 'assistant',
-              content: fullResponse,
+              content: analysisMsg,
               message_type: 'text',
               metadata: {
                 agent_name: '协调者',
-                mentioned_agents: mentionedAgents.map(a => a.id),
+                coordinator_mode: true,
+                coordinator_stage: 'analysis'
+              }
+            });
+
+          // 步骤2: 逐个调用智能体
+          const agentResponses: any[] = [];
+
+          for (const call of agentCalls) {
+            const agent = mentionedAgents.find(a => a.id === call.agent_id);
+            if (!agent) continue;
+
+            // 调用智能体
+            const agentResponse = await callAgent(agent, call.query, projectContext);
+            agentResponses.push({
+              agent_id: agent.id,
+              agent_name: agent.name,
+              response: agentResponse
+            });
+
+            // 发送智能体消息到前端
+            const agentSSE = JSON.stringify({
+              type: 'agent',
+              agent_id: agent.id,
+              agent_name: agent.name,
+              project_id: agent.project_id,
+              role: agent.role,
+              content: agentResponse
+            });
+            controller.enqueue(encoder.encode(`data: ${agentSSE}\n\n`));
+
+            // 保存智能体消息到数据库
+            await client
+              .from('messages')
+              .insert({
+                conversation_id,
+                agent_id: agent.id,
+                role: 'assistant',
+                content: agentResponse,
+                message_type: 'text',
+                metadata: {
+                  agent_name: agent.name,
+                  project_id: agent.project_id,
+                  role: agent.role
+                }
+              });
+          }
+
+          // 步骤3: 协调者生成总结
+          const summaryPrompt = `以下是多个智能体对用户需求的回复，请总结并整合：
+
+用户需求: ${user_message}
+
+智能体回复:
+${agentResponses.map(r => `
+## ${r.agent_name} 的回复
+${r.response}
+`).join('\n')}
+
+请以清晰的方式总结所有智能体的观点，并提供最终的结论或建议。`;
+
+          const summaryStream = llmClient.stream(
+            [
+              { role: 'system', content: '你是一个协调者，负责总结多个智能体的回复。' },
+              { role: 'user', content: summaryPrompt }
+            ],
+            {
+              model: 'doubao-seed-1-8-251228',
+              temperature: 0.7,
+              thinking: 'disabled',
+              caching: 'disabled'
+            }
+          );
+
+          let summary = '';
+          for await (const chunk of summaryStream) {
+            if (chunk.content) {
+              const text = chunk.content.toString();
+              summary += text;
+
+              // 流式发送总结
+              const summarySSE = JSON.stringify({
+                type: 'coordinator',
+                agent_name: '协调者',
+                content: text,
                 coordinator_mode: true
+              });
+              controller.enqueue(encoder.encode(`data: ${summarySSE}\n\n`));
+            }
+          }
+
+          // 保存总结消息
+          await client
+            .from('messages')
+            .insert({
+              conversation_id,
+              agent_id: mentionedAgents[0].id,
+              role: 'assistant',
+              content: summary,
+              message_type: 'text',
+              metadata: {
+                agent_name: '协调者',
+                coordinator_mode: true,
+                coordinator_stage: 'summary'
               }
             });
 
@@ -528,4 +654,54 @@ async function handleMultipleAgentsWithCoordinator(
       { status: 500 }
     );
   }
+}
+
+/**
+ * 调用单个智能体
+ */
+async function callAgent(agent: Agent, query: string, projectContext: any): Promise<string> {
+  const { getEffectiveAPIConfig } = await import('@/lib/global-config');
+  const { injectProjectContext } = await import('@/lib/project-context');
+
+  // 构建智能体的系统提示词
+  let systemPrompt = agent.system_prompt || '';
+  systemPrompt = injectProjectContext(systemPrompt, projectContext);
+
+  // 获取模型配置
+  const agentModelConfig = agent.model_config || {};
+  const apiKey = agentModelConfig.api_key || getEffectiveAPIConfig().api_key;
+  const baseUrl = agentModelConfig.base_url || getEffectiveAPIConfig().base_url;
+  const modelName = agent.model || 'doubao-seed-1-8-251228';
+
+  // 设置环境变量
+  process.env.OPENAI_API_KEY = apiKey;
+  if (baseUrl) {
+    process.env.OPENAI_BASE_URL = baseUrl;
+  }
+
+  // 调用智能体LLM
+  const config = new Config();
+  const llmClient = new LLMClient(config);
+
+  const stream = llmClient.stream(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: query }
+    ],
+    {
+      model: modelName,
+      temperature: agentModelConfig.temperature || 0.7,
+      thinking: agentModelConfig.thinking || 'disabled',
+      caching: agentModelConfig.caching || 'disabled'
+    }
+  );
+
+  let response = '';
+  for await (const chunk of stream) {
+    if (chunk.content) {
+      response += chunk.content.toString();
+    }
+  }
+
+  return response;
 }

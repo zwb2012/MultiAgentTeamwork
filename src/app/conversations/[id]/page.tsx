@@ -55,6 +55,9 @@ export default function ConversationDetailPage() {
   const [aiResponding, setAiResponding] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [respondingAgent, setRespondingAgent] = useState<Agent | null>(null);
+  // 多智能体流式输出跟踪
+  const [currentStreamMessageId, setCurrentStreamMessageId] = useState<string | null>(null);
+  const [currentStreamMessageType, setCurrentStreamMessageType] = useState<'coordinator' | 'agent' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
@@ -168,8 +171,9 @@ export default function ConversationDetailPage() {
       // 处理流式响应
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
+      // 兼容旧的单智能体模式
       let fullContent = '';
-      let sseMetadata: Record<string, any> = {}; // 保存SSE元数据
+      let sseMetadata: Record<string, any> = {};
 
       if (reader) {
         while (true) {
@@ -189,21 +193,72 @@ export default function ConversationDetailPage() {
               try {
                 const parsed = JSON.parse(data);
                 if (parsed.content) {
-                  fullContent += parsed.content;
-                  setStreamingMessage(fullContent);
+                  // 检查是否是新消息类型（多智能体协调模式）
+                  const messageType = parsed.type; // 'coordinator' | 'agent'
 
-                  // 保存SSE元数据（如coordinator_mode、agent_name等）
-                  if (parsed.coordinator_mode) {
-                    sseMetadata.coordinator_mode = true;
-                  }
-                  if (parsed.agent_name) {
-                    sseMetadata.agent_name = parsed.agent_name;
-                  }
+                  if (messageType && messageType !== currentStreamMessageType) {
+                    // 新的消息类型，创建新的消息对象
+                    const newMsgId = `ai-${messageType}-${Date.now()}`;
+                    setCurrentStreamMessageId(newMsgId);
+                    setCurrentStreamMessageType(messageType);
 
-                  // 设置响应的智能体
-                  if (parsed.agent_id && !respondingAgent) {
-                    const agent = participants.find(a => a.id === parsed.agent_id);
-                    if (agent) setRespondingAgent(agent);
+                    const newMsg: Message = {
+                      id: newMsgId,
+                      conversation_id: conversationId,
+                      agent_id: parsed.agent_id,
+                      role: 'assistant',
+                      content: parsed.content,
+                      created_at: new Date().toISOString(),
+                      message_type: 'text',
+                      metadata: {
+                        coordinator_mode: parsed.coordinator_mode,
+                        agent_name: parsed.agent_name,
+                        project_id: parsed.project_id,
+                        role: parsed.role
+                      }
+                    };
+
+                    // 如果是agent类型，设置respondingAgent
+                    if (messageType === 'agent' && parsed.agent_id) {
+                      const agent = participants.find(a => a.id === parsed.agent_id);
+                      if (agent) {
+                        setRespondingAgent(agent);
+                        // 确保agent对象包含项目信息
+                        newMsg.metadata!.project_id = agent.project_id;
+                        newMsg.metadata!.role = agent.role;
+                      }
+                    }
+
+                    setMessages(prev => [...prev, newMsg]);
+                    setStreamingMessage(parsed.content);
+                  } else if (currentStreamMessageId) {
+                    // 相同的消息类型，追加到现有消息
+                    setMessages(prev =>
+                      prev.map(msg =>
+                        msg.id === currentStreamMessageId
+                          ? { ...msg, content: msg.content + parsed.content }
+                          : msg
+                      )
+                    );
+                    setStreamingMessage(prev => prev + parsed.content);
+                  } else {
+                    // 兼容旧的单智能体模式（没有type字段）
+                    fullContent += parsed.content;
+                    setStreamingMessage(fullContent);
+
+                    // 保存SSE元数据
+                    if (parsed.coordinator_mode) {
+                      sseMetadata.coordinator_mode = true;
+                    }
+                    if (parsed.agent_name) {
+                      sseMetadata.agent_name = parsed.agent_name;
+                    }
+
+                    // 设置响应的智能体
+                    if (parsed.agent_id && !respondingAgent) {
+                      const agent = participants.find(a => a.id === parsed.agent_id);
+                      if (agent) setRespondingAgent(agent);
+                    }
                   }
                 }
                 if (parsed.error) {
@@ -217,8 +272,8 @@ export default function ConversationDetailPage() {
         }
       }
 
-      // 添加 AI 回复到消息列表
-      if (fullContent) {
+      // 兼容旧的单智能体模式（没有使用多智能体协调）
+      if (fullContent && !currentStreamMessageId) {
         const aiMsg: Message = {
           id: `ai-${Date.now()}`,
           conversation_id: conversationId,
@@ -227,7 +282,6 @@ export default function ConversationDetailPage() {
           content: fullContent,
           created_at: new Date().toISOString(),
           message_type: 'text',
-          // 包含从SSE解析的元数据
           metadata: Object.keys(sseMetadata).length > 0 ? sseMetadata : undefined
         };
         setMessages(prev => [...prev, aiMsg]);
@@ -243,6 +297,8 @@ export default function ConversationDetailPage() {
       setAiResponding(false);
       setStreamingMessage('');
       setRespondingAgent(null);
+      setCurrentStreamMessageId(null);
+      setCurrentStreamMessageType(null);
     }
   };
 
@@ -535,18 +591,33 @@ export default function ConversationDetailPage() {
           ) : (
             <div className="space-y-4">
               {messages.map((msg, index) => {
-                // 如果是协调者模式，优先显示metadata中的agent_name
+                // 从metadata中获取智能体信息（多智能体协调模式）
                 const isCoordinator = msg.metadata?.coordinator_mode;
                 const coordinatorName = msg.metadata?.agent_name || '协调者';
-                
-                // 非协调者模式下从participants查找
-                const agent = isCoordinator 
-                  ? null 
-                  : participants.find(a => a.id === msg.agent_id);
-                const displayName = isCoordinator 
-                  ? coordinatorName 
-                  : (agent?.name || '未知智能体');
-                
+
+                // 构建智能体信息对象（优先从metadata读取，兼容旧逻辑）
+                let agentInfo: Agent | null = null;
+                if (isCoordinator) {
+                  // 协调者模式：只显示名称，不显示项目/角色
+                  agentInfo = null;
+                } else if (msg.metadata?.agent_name) {
+                  // 多智能体协调模式：从metadata读取信息
+                  agentInfo = {
+                    id: msg.agent_id || '',
+                    name: msg.metadata.agent_name,
+                    project_id: msg.metadata.project_id,
+                    role: msg.metadata.role,
+                    online_status: 'online' as const
+                  } as Agent;
+                } else {
+                  // 传统模式：从participants查找
+                  agentInfo = participants.find(a => a.id === msg.agent_id) || null;
+                }
+
+                const displayName = isCoordinator
+                  ? coordinatorName
+                  : (agentInfo?.name || '未知智能体');
+
                 const isUser = msg.role === 'user';
                 
                 return (
@@ -571,11 +642,11 @@ export default function ConversationDetailPage() {
                                 协调者
                               </Badge>
                             )}
-                            {!isCoordinator && agent && (
+                            {!isCoordinator && agentInfo && (
                               <>
-                                {agent.project_id ? (
+                                {agentInfo.project_id ? (
                                   <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                                    {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                                    {projects.find(p => p.id === agentInfo.project_id)?.name || '未知项目'}
                                   </Badge>
                                 ) : (
                                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
@@ -583,7 +654,7 @@ export default function ConversationDetailPage() {
                                   </Badge>
                                 )}
                                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                                  {getRoleLabel(agent.role)}
+                                  {getRoleLabel(agentInfo.role)}
                                 </Badge>
                               </>
                             )}
