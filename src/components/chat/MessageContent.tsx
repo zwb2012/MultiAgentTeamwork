@@ -21,9 +21,11 @@ interface Section {
 const DEFAULT_MAX_LENGTH = 100; // 默认截断长度
 const CODEBLOCK_MAX_LENGTH = 500; // 包含代码块时的截断长度
 const AGGRESSIVE_TRUNCATE_LENGTH = 200; // 激进模式截断长度
+const COLLAPSED_PREVIEW_LENGTH = 60; // 整体折叠时显示的预览长度
 
 export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStreaming = false }: MessageContentProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // 检查内容是否包含代码块
@@ -73,6 +75,28 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
 
   // 如果使用章节折叠
   if (shouldUseSectionFolding) {
+    // 整体折叠模式（显示摘要）
+    if (isCollapsed) {
+      const preview = content.slice(0, COLLAPSED_PREVIEW_LENGTH) + '...';
+      return (
+        <div className="message-content">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setIsCollapsed(false)}
+            >
+              <ChevronDown className="h-3 w-3 mr-1" />
+              展开
+            </Button>
+            <span className="text-xs text-muted-foreground line-clamp-1">{preview}</span>
+          </div>
+        </div>
+      );
+    }
+
+    // 章节折叠模式
     return (
       <div className="message-content space-y-2">
         {/* 整体操作按钮 */}
@@ -95,6 +119,15 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
             >
               <Minus className="h-3 w-3 mr-1" />
               全部收起
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setIsCollapsed(true)}
+            >
+              <ChevronUp className="h-3 w-3 mr-1" />
+              最小化
             </Button>
           </div>
           <Button
@@ -140,6 +173,27 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   const displayContent = shouldTruncate ? content.slice(0, effectiveMaxLength) + '\n\n... (点击展开查看更多)' : content;
   const needsExpandButton = content.length > effectiveMaxLength && !isStreaming;
 
+  // 整体折叠模式（显示摘要）
+  if (isCollapsed && !isStreaming) {
+    const preview = content.slice(0, COLLAPSED_PREVIEW_LENGTH) + '...';
+    return (
+      <div className="message-content">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setIsCollapsed(false)}
+          >
+            <ChevronDown className="h-3 w-3 mr-1" />
+            展开
+          </Button>
+          <span className="text-xs text-muted-foreground line-clamp-1">{preview}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="message-content">
       <div className="text-sm whitespace-pre-wrap break-words">
@@ -170,19 +224,15 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
         </div>
       )}
 
-      {/* 复制按钮 */}
-      {!hasCodeBlock && !isStreaming && content.length > 100 && (
+      {/* 最小化按钮 */}
+      {!isStreaming && content.length > COLLAPSED_PREVIEW_LENGTH && (
         <Button
           variant="ghost"
           size="sm"
           className="absolute top-2 right-2 h-6 px-2 opacity-0 hover:opacity-100 transition-opacity"
-          onClick={handleCopy}
+          onClick={() => setIsCollapsed(true)}
         >
-          {copied ? (
-            <Check className="h-3 w-3 text-green-500" />
-          ) : (
-            <Copy className="h-3 w-3 text-muted-foreground" />
-          )}
+          <Minus className="h-3 w-3 text-muted-foreground" />
         </Button>
       )}
     </div>
