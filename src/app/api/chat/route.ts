@@ -99,19 +99,22 @@ export async function POST(request: NextRequest) {
       return roleTemplate?.name || null;
     };
 
-    // 智能识别目标智能体
+    // 智能识别目标智能体（支持多个@提及）
     let targetAgent: any = null;
-    
+    let mentionedAgents: Agent[] = []; // 存储所有@提及的智能体
+
     if (agent_id) {
-      // 明确指定了agent_id
+      // 明确指定了agent_id，只使用单个智能体
       const found = participants.find((p: any) => p.agent_id === agent_id);
       if (found) {
         targetAgent = found.agents;
+        mentionedAgents = [targetAgent];
       }
     } else if (auto_detect !== false) {
-      // 自动识别：优先检查消息中是否包含 @智能体名称 或 @角色名称 格式
+      // 自动识别：检查消息中是否包含 @智能体名称 或 @角色名称 格式
       const mentionMatch = user_message.match(/@([^\s@]+)/g);
       if (mentionMatch) {
+        // 检测所有@提及的智能体
         for (const match of mentionMatch) {
           const mentionName = match.slice(1).toLowerCase(); // 去掉@符号
           for (const p of participants) {
@@ -119,59 +122,65 @@ export async function POST(request: NextRequest) {
             // 支持名字和角色名称双重识别
             const agentName = agent.name?.toLowerCase();
             const roleName = getAgentRoleName(agent)?.toLowerCase();
-            
-            if ((agentName && agentName === mentionName) || 
+
+            if ((agentName && agentName === mentionName) ||
                 (roleName && roleName === mentionName)) {
-              targetAgent = agent;
-              break;
+              // 避免重复添加
+              if (!mentionedAgents.find(a => a.id === agent.id)) {
+                mentionedAgents.push(agent);
+              }
             }
           }
-          if (targetAgent) break;
         }
       }
-      
-      // 如果没有通过@识别到，检查消息中是否包含智能体名字或角色名称
-      if (!targetAgent) {
+
+      // 如果检测到多个智能体，使用协调者模式
+      if (mentionedAgents.length > 1) {
+        return await handleMultipleAgentsWithCoordinator(
+          mentionedAgents,
+          conversation_id,
+          user_message,
+          projectContext,
+          participants,
+          request
+        );
+      }
+
+      // 如果只检测到一个智能体，使用原有逻辑
+      if (mentionedAgents.length === 1) {
+        targetAgent = mentionedAgents[0];
+      } else {
+        // 没有检测到@，检查消息中是否包含智能体名字或角色名称
         const lowerMessage = user_message.toLowerCase();
-        
+
         for (const p of participants) {
           const agent = p.agents as unknown as Agent;
           const agentName = agent.name?.toLowerCase();
           const roleName = getAgentRoleName(agent)?.toLowerCase();
-          
+
           // 支持名字和角色名称双重识别
-          if ((agentName && lowerMessage.includes(agentName)) || 
+          if ((agentName && lowerMessage.includes(agentName)) ||
               (roleName && lowerMessage.includes(roleName))) {
             targetAgent = agent;
             break;
           }
         }
       }
-      
-      // 如果没有识别到，使用第一个空闲的智能体
-      if (!targetAgent) {
-        const idleParticipant = participants.find((p: any) => {
-          const agent = p.agents as unknown as Agent;
-          return agent.status === 'idle' || agent.status === 'working';
-        });
-        if (idleParticipant) {
-          targetAgent = idleParticipant.agents as unknown as Agent;
-        } else {
-          targetAgent = participants[0].agents as unknown as Agent;
-        }
-      }
-    } else {
-      // 不自动识别，使用第一个智能体
-      targetAgent = participants[0].agents as unknown as Agent;
     }
-    
+
+    // 如果没有识别到任何智能体，使用第一个空闲的智能体
     if (!targetAgent) {
-      return NextResponse.json(
-        { success: false, error: '未找到可用的智能体' },
-        { status: 400 }
-      );
+      const idleParticipant = participants.find((p: any) => {
+        const agent = p.agents as unknown as Agent;
+        return agent.status === 'idle' || agent.status === 'working';
+      });
+      if (idleParticipant) {
+        targetAgent = idleParticipant.agents as unknown as Agent;
+      } else {
+        targetAgent = participants[0].agents as unknown as Agent;
+      }
     }
-    
+
     // 检查智能体类型
     if (targetAgent.agent_type === 'process') {
       return NextResponse.json(
@@ -344,6 +353,169 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('对话失败:', error);
+    return NextResponse.json(
+      { success: false, error: error instanceof Error ? error.message : '未知错误' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 处理多智能体协调
+ * 使用协调者模式，让协调者LLM串行调用其他智能体并整合输出
+ */
+async function handleMultipleAgentsWithCoordinator(
+  mentionedAgents: Agent[],
+  conversation_id: string,
+  user_message: string,
+  projectContext: any,
+  participants: any[],
+  request: NextRequest
+): Promise<Response> {
+  const client = getSupabaseClient();
+  const encoder = new TextEncoder();
+
+  // 更新所有涉及的智能体状态为工作中
+  await Promise.all(
+    mentionedAgents.map(agent =>
+      client
+        .from('agents')
+        .update({ work_status: 'working', updated_at: new Date().toISOString() })
+        .eq('id', agent.id)
+    )
+  );
+
+  // 获取历史消息
+  const { data: historyMessages } = await client
+    .from('messages')
+    .select('*')
+    .eq('conversation_id', conversation_id)
+    .order('created_at', { ascending: true })
+    .limit(10);
+
+  // 保存用户消息（使用第一个智能体的ID）
+  await client
+    .from('messages')
+    .insert({
+      conversation_id,
+      agent_id: mentionedAgents[0].id,
+      role: 'user',
+      content: user_message,
+      message_type: 'text',
+      metadata: {
+        mentioned_agents: mentionedAgents.map(a => a.id),
+        coordinator_mode: true
+      }
+    });
+
+  try {
+    // 创建协调者
+    const { AgentCoordinator } = await import('@/lib/chat/coordinator');
+    const { getEffectiveAPIConfig } = await import('@/lib/global-config');
+
+    // 初始化LLM客户端
+    const config = new Config();
+    const customHeaders = {}; // 不需要转发headers，因为我们在调用时会设置环境变量
+    const llmClient = new LLMClient(config, customHeaders);
+
+    const coordinator = new AgentCoordinator(llmClient);
+
+    // 使用协调者协调多个智能体
+    const stream = await coordinator.coordinate(
+      user_message,
+      mentionedAgents,
+      projectContext,
+      historyMessages || []
+    );
+
+    // 创建包装流，用于保存响应和更新状态
+    const wrapperStream = new ReadableStream({
+      async start(controller) {
+        let fullResponse = '';
+
+        try {
+          const reader = stream.getReader();
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            if (value) {
+              const text = value.toString();
+              fullResponse += text;
+              controller.enqueue(value);
+            }
+          }
+
+          // 保存协调者的响应
+          await client
+            .from('messages')
+            .insert({
+              conversation_id,
+              agent_id: mentionedAgents[0].id,
+              role: 'assistant',
+              content: fullResponse,
+              message_type: 'text',
+              metadata: {
+                agent_name: '协调者',
+                mentioned_agents: mentionedAgents.map(a => a.id),
+                coordinator_mode: true
+              }
+            });
+
+          // 更新所有智能体状态为空闲
+          await Promise.all(
+            mentionedAgents.map(agent =>
+              client
+                .from('agents')
+                .update({ work_status: 'idle', updated_at: new Date().toISOString() })
+                .eq('id', agent.id)
+            )
+          );
+
+          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          controller.close();
+        } catch (error) {
+          console.error('协调者处理失败:', error);
+
+          // 更新所有智能体状态为空闲
+          await Promise.all(
+            mentionedAgents.map(agent =>
+              client
+                .from('agents')
+                .update({ work_status: 'idle', updated_at: new Date().toISOString() })
+                .eq('id', agent.id)
+            )
+          );
+
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ error: '协调者处理失败' })}\n\n`)
+          );
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(wrapperStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    });
+  } catch (error) {
+    console.error('协调者初始化失败:', error);
+
+    // 更新所有智能体状态为空闲
+    await Promise.all(
+      mentionedAgents.map(agent =>
+        client
+          .from('agents')
+          .update({ work_status: 'idle', updated_at: new Date().toISOString() })
+          .eq('id', agent.id)
+      )
+    );
+
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : '未知错误' },
       { status: 500 }
