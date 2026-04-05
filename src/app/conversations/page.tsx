@@ -63,6 +63,7 @@ export default function ConversationsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);  // 防止重复创建
   
   // 管理参与者相关状态
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
@@ -71,6 +72,7 @@ export default function ConversationsPage() {
   const [selectedNewAgentIds, setSelectedNewAgentIds] = useState<string[]>([]);
   const [managingLoading, setManagingLoading] = useState(false);
   const [managingSubmitting, setManagingSubmitting] = useState(false);
+  const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
   
   // 创建表单
   const [createForm, setCreateForm] = useState({
@@ -179,6 +181,8 @@ export default function ConversationsPage() {
   }, [viewMode, selectedProjectId]);
 
   const handleCreateConversation = async () => {
+    if (isCreating) return;  // 防止重复点击
+    
     if (!createForm.title) {
       alert('请输入会话标题');
       return;
@@ -192,6 +196,8 @@ export default function ConversationsPage() {
     // 如果是项目会话模式，自动关联当前项目；全局会话模式不关联项目
     const projectId = viewMode === 'project' ? selectedProjectId : null;
 
+    setIsCreating(true);  // 开始创建，禁用按钮
+    
     try {
       const response = await fetch('/api/conversations', {
         method: 'POST',
@@ -220,6 +226,8 @@ export default function ConversationsPage() {
       }
     } catch (error) {
       console.error('创建会话失败:', error);
+    } finally {
+      setIsCreating(false);  // 恢复按钮状态
     }
   };
 
@@ -298,7 +306,9 @@ export default function ConversationsPage() {
 
   // 移除参与者
   const handleRemoveParticipant = async (agentId: string) => {
-    if (!managingConversation) return;
+    if (!managingConversation || removingAgentId) return;  // 防止重复点击
+    
+    setRemovingAgentId(agentId);
     
     try {
       const response = await fetch(`/api/conversations/${managingConversation.id}/participants?agent_id=${agentId}`, {
@@ -316,6 +326,8 @@ export default function ConversationsPage() {
     } catch (error) {
       console.error('移除参与者失败:', error);
       alert('移除失败');
+    } finally {
+      setRemovingAgentId(null);
     }
   };
 
@@ -617,11 +629,18 @@ export default function ConversationsPage() {
 
               {/* 创建按钮 */}
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
                   取消
                 </Button>
-                <Button onClick={handleCreateConversation}>
-                  创建
+                <Button onClick={handleCreateConversation} disabled={isCreating}>
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      创建中...
+                    </>
+                  ) : (
+                    '创建'
+                  )}
                 </Button>
               </div>
             </div>
@@ -975,9 +994,13 @@ export default function ConversationsPage() {
                             size="sm"
                             className="text-destructive hover:text-destructive"
                             onClick={() => handleRemoveParticipant(agent.id)}
-                            disabled={managingParticipants.length <= 1}
+                            disabled={managingParticipants.length <= 1 || removingAgentId === agent.id}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            {removingAgentId === agent.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       ))
