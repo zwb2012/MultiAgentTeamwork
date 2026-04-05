@@ -22,16 +22,15 @@ const DEFAULT_MAX_LENGTH = 100; // 默认截断长度
 const CODEBLOCK_MAX_LENGTH = 500; // 包含代码块时的截断长度
 const AGGRESSIVE_TRUNCATE_LENGTH = 200; // 激进模式截断长度
 const COLLAPSED_PREVIEW_LENGTH = 60; // 整体折叠时显示的预览长度
+const AUTO_MINIMIZE_THRESHOLD = 800; // 自动最小化阈值
+const AUTO_SECTION_FOLD_THRESHOLD = 300; // 自动章节折叠阈值
+const AUTO_TRUNCATE_THRESHOLD = 100; // 自动截断折叠阈值
 
 export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStreaming = false }: MessageContentProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   // 检查内容是否包含代码块
   const hasCodeBlock = /```[\s\S]*?```/.test(content);
 
-  // 解析内容为章节
+  // 解析内容为章节（必须在状态计算之前）
   const sections = useMemo(() => {
     return parseSections(content);
   }, [content]);
@@ -39,9 +38,23 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   // 检查是否应该使用章节折叠
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
-  // 章节折叠状态
+  // 自动判断初始折叠状态
+  const shouldAutoMinimize = !isStreaming && content.length > AUTO_MINIMIZE_THRESHOLD;
+  const shouldAutoSectionFold = !isStreaming && !shouldAutoMinimize && shouldUseSectionFolding && content.length > AUTO_SECTION_FOLD_THRESHOLD;
+  const shouldAutoTruncate = !isStreaming && !shouldAutoMinimize && !shouldAutoSectionFold && content.length > AUTO_TRUNCATE_THRESHOLD;
+
+  const [isExpanded, setIsExpanded] = useState(shouldAutoTruncate);
+  const [copied, setCopied] = useState(false);
+
+  // 根据内容长度自动设置折叠状态
+  const [isCollapsed, setIsCollapsed] = useState(shouldAutoMinimize);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    // 默认展开前3个章节，折叠其余
+    // 如果应该自动章节折叠，默认只展开前1-2个章节
+    if (shouldAutoSectionFold) {
+      if (sections.length <= 2) return new Set(sections.map(s => s.id));
+      return new Set(sections.slice(0, 2).map(s => s.id));
+    }
+    // 否则正常展开前3个章节
     if (sections.length <= 3) return new Set(sections.map(s => s.id));
     return new Set(sections.slice(0, 3).map(s => s.id));
   });
