@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import type { Conversation, Message } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
+import { MessageContent } from '@/components/chat/MessageContent';
 
 export default function ConversationDetailPage() {
   const params = useParams();
@@ -504,13 +505,13 @@ export default function ConversationDetailPage() {
                         </AvatarFallback>
                       </Avatar>
                     )}
-                    <div className={`max-w-[70%] ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3`}>
+                    <div className={`max-w-[70%] ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3 relative group`}>
                       {!isUser && agent && (
                         <div className="text-xs font-medium mb-1 text-muted-foreground">
                           {agent.name}
                         </div>
                       )}
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <MessageContent content={msg.content} isStreaming={false} />
                       <div className={`text-xs mt-1 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {msg.created_at && new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                       </div>
@@ -537,7 +538,7 @@ export default function ConversationDetailPage() {
                       {respondingAgent.name}
                       <Loader2 className="inline h-3 w-3 ml-2 animate-spin" />
                     </div>
-                    <p className="text-sm whitespace-pre-wrap">{streamingMessage}</p>
+                    <MessageContent content={streamingMessage} isStreaming={true} />
                   </div>
                 </div>
               )}

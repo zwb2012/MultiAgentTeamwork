@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Square
 } from 'lucide-react';
+import { MessageContent } from '@/components/chat/MessageContent';
 
 // 运行状态配置
 const RUN_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string; icon: typeof Clock }> = {
@@ -638,9 +639,7 @@ export default function PipelineRunDetailPage() {
                                 {new Date(message.created_at).toLocaleTimeString('zh-CN')}
                               </span>
                             </div>
-                            <div className="mt-1 text-sm whitespace-pre-wrap">
-                              {message.content}
-                            </div>
+                            <MessageContent content={message.content} isStreaming={false} />
                           </div>
                         </div>
                       ))}
