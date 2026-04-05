@@ -263,6 +263,47 @@ export default function ConversationDetailPage() {
                     }
                   }
                 }
+
+                // 处理新的并行流式消息类型
+                if (parsed.type === 'agent_start') {
+                  // 创建新的消息卡片
+                  const newMsg: Message = {
+                    id: parsed.msg_id,
+                    conversation_id: conversationId,
+                    agent_id: parsed.agent_id,
+                    role: 'assistant',
+                    content: '',
+                    created_at: new Date().toISOString(),
+                    message_type: 'text',
+                    metadata: {
+                      agent_name: parsed.agent_name,
+                      project_id: parsed.project_id,
+                      role: parsed.role
+                    },
+                    streaming: true,
+                    done: false
+                  };
+                  setMessages(prev => [...prev, newMsg]);
+                } else if (parsed.type === 'agent_chunk') {
+                  // 更新对应消息的流式内容
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === parsed.msg_id
+                        ? { ...msg, content: msg.content + parsed.content }
+                        : msg
+                    )
+                  );
+                } else if (parsed.type === 'agent_done') {
+                  // 标记消息完成
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === parsed.msg_id
+                        ? { ...msg, streaming: false, done: true }
+                        : msg
+                    )
+                  );
+                }
+
                 if (parsed.error) {
                   throw new Error(parsed.error);
                 }
@@ -663,7 +704,14 @@ export default function ConversationDetailPage() {
                           </div>
                         </div>
                       )}
-                      <MessageContent content={msg.content} isStreaming={false} />
+                      <MessageContent content={msg.content} isStreaming={msg.streaming || false} />
+                      {/* 流式状态指示器 */}
+                      {msg.streaming && (
+                        <div className="flex items-center gap-2 text-xs mt-2">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                          <span className={isUser ? 'text-primary-foreground/70' : 'text-gray-500'}>正在思考...</span>
+                        </div>
+                      )}
                       <div className={`text-xs mt-1 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {msg.created_at && new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                       </div>

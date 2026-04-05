@@ -472,40 +472,55 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
           const analysisMsg = `🤖 协调者正在协调 ${mentionedAgents.length} 个智能体...\n\n任务分析: ${coordinatorAnalysis.replace(/```json[\s\S]*?```/g, '').trim()}`;
           console.log('[协调者分析]', analysisMsg);
 
-          // 步骤2: 逐个调用智能体
-          const agentResponses: any[] = [];
-
-          for (const call of agentCalls) {
+          // 步骤2: 并行调用所有智能体
+          const agentPromises = agentCalls.map(async (call) => {
             const agent = mentionedAgents.find(a => a.id === call.agent_id);
-            if (!agent) continue;
+            if (!agent) return null;
 
-            // 调用智能体
-            const agentResponse = await callAgent(agent, call.query, projectContext);
-            agentResponses.push({
-              agent_id: agent.id,
-              agent_name: agent.name,
-              response: agentResponse
-            });
+            let fullResponse = '';
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).substr(2, 9);
+            const msgId = `ai-agent-${timestamp}-${randomId}`;
 
-            // 发送智能体消息到前端
-            const agentSSE = JSON.stringify({
-              type: 'agent',
-              agent_id: agent.id,
-              agent_name: agent.name,
-              project_id: agent.project_id,
-              role: agent.role,
-              content: agentResponse
-            });
-            controller.enqueue(encoder.encode(`data: ${agentSSE}\n\n`));
+            // 发送开始消息（创建消息卡片）
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'agent_start',
+                agent_id: agent.id,
+                agent_name: agent.name,
+                project_id: agent.project_id,
+                role: agent.role,
+                msg_id: msgId,
+                content: ''
+              })}\n\n`
+            ));
 
-            // 保存智能体消息到数据库
+            // 调用智能体（传入流式回调）
+            fullResponse = await callAgentWithStream(
+              agent,
+              call.query,
+              projectContext,
+              (chunk) => {
+                // 实时发送每个 chunk
+                controller.enqueue(encoder.encode(
+                  `data: ${JSON.stringify({
+                    type: 'agent_chunk',
+                    agent_id: agent.id,
+                    msg_id: msgId,
+                    content: chunk
+                  })}\n\n`
+                ));
+              }
+            );
+
+            // 保存完整消息到数据库
             await client
               .from('messages')
               .insert({
                 conversation_id,
                 agent_id: agent.id,
                 role: 'assistant',
-                content: agentResponse,
+                content: fullResponse,
                 message_type: 'text',
                 metadata: {
                   agent_name: agent.name,
@@ -513,7 +528,21 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                   role: agent.role
                 }
               });
-          }
+
+            // 发送完成标记
+            controller.enqueue(encoder.encode(
+              `data: ${JSON.stringify({
+                type: 'agent_done',
+                agent_id: agent.id,
+                msg_id: msgId
+              })}\n\n`
+            ));
+
+            return { agent, response: fullResponse };
+          });
+
+          // 等待所有智能体完成（并行）
+          await Promise.all(agentPromises);
 
           // 更新所有智能体状态为空闲
           await Promise.all(
@@ -619,6 +648,63 @@ async function callAgent(agent: Agent, query: string, projectContext: any): Prom
   for await (const chunk of stream) {
     if (chunk.content) {
       response += chunk.content.toString();
+    }
+  }
+
+  return response;
+}
+
+/**
+ * 调用单个智能体（支持流式回调）
+ */
+async function callAgentWithStream(
+  agent: Agent,
+  query: string,
+  projectContext: any,
+  onChunk: (chunk: string) => void
+): Promise<string> {
+  const { getEffectiveAPIConfig } = await import('@/lib/global-config');
+  const { injectProjectContext } = await import('@/lib/project-context');
+
+  // 构建智能体的系统提示词
+  let systemPrompt = agent.system_prompt || '';
+  systemPrompt = injectProjectContext(systemPrompt, projectContext);
+
+  // 获取模型配置
+  const agentModelConfig = agent.model_config || {};
+  const apiKey = agentModelConfig.api_key || getEffectiveAPIConfig().api_key;
+  const baseUrl = agentModelConfig.base_url || getEffectiveAPIConfig().base_url;
+  const modelName = agent.model || 'doubao-seed-1-8-251228';
+
+  // 设置环境变量
+  process.env.OPENAI_API_KEY = apiKey;
+  if (baseUrl) {
+    process.env.OPENAI_BASE_URL = baseUrl;
+  }
+
+  // 调用智能体LLM
+  const config = new Config();
+  const llmClient = new LLMClient(config);
+
+  const stream = llmClient.stream(
+    [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: query }
+    ],
+    {
+      model: modelName,
+      temperature: agentModelConfig.temperature || 0.7,
+      thinking: agentModelConfig.thinking || 'disabled',
+      caching: agentModelConfig.caching || 'disabled'
+    }
+  );
+
+  let response = '';
+  for await (const chunk of stream) {
+    if (chunk.content) {
+      const content = chunk.content.toString();
+      response += content;
+      onChunk(content); // 实时调用回调，将 chunk 发送到前端
     }
   }
 
