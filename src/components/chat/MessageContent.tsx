@@ -4,11 +4,13 @@ import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, Code, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { defaultConfig, countLines, shouldAutoMinimize, shouldAutoSectionFold, shouldAutoTruncate } from '@/lib/message-content-config';
 
 interface MessageContentProps {
   content: string;
   maxLength?: number;
   isStreaming?: boolean;
+  config?: any; // 可选的自定义配置
 }
 
 interface Section {
@@ -18,15 +20,10 @@ interface Section {
   id: string;
 }
 
-const DEFAULT_MAX_LENGTH = 100; // 默认截断长度
-const CODEBLOCK_MAX_LENGTH = 500; // 包含代码块时的截断长度
-const AGGRESSIVE_TRUNCATE_LENGTH = 200; // 激进模式截断长度
-const COLLAPSED_PREVIEW_LENGTH = 60; // 整体折叠时显示的预览长度
-const AUTO_MINIMIZE_THRESHOLD = 800; // 自动最小化阈值
-const AUTO_SECTION_FOLD_THRESHOLD = 300; // 自动章节折叠阈值
-const AUTO_TRUNCATE_THRESHOLD = 100; // 自动截断折叠阈值
+export function MessageContent({ content, maxLength, isStreaming = false, config = defaultConfig }: MessageContentProps) {
+  // 使用传入的配置或默认配置
+  const finalConfig = config;
 
-export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStreaming = false }: MessageContentProps) {
   // 检查内容是否包含代码块
   const hasCodeBlock = /```[\s\S]*?```/.test(content);
 
@@ -38,25 +35,27 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   // 检查是否应该使用章节折叠
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
-  // 自动判断初始折叠状态
-  const shouldAutoMinimize = !isStreaming && content.length > AUTO_MINIMIZE_THRESHOLD;
-  const shouldAutoSectionFold = !isStreaming && !shouldAutoMinimize && shouldUseSectionFolding && content.length > AUTO_SECTION_FOLD_THRESHOLD;
-  const shouldAutoTruncate = !isStreaming && !shouldAutoMinimize && !shouldAutoSectionFold && content.length > AUTO_TRUNCATE_THRESHOLD;
+  // 自动判断初始折叠状态（使用配置）
+  const shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
+  const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
+  const shouldAutoTruncateFlag = shouldAutoTruncate(content, isStreaming, finalConfig);
 
-  const [isExpanded, setIsExpanded] = useState(shouldAutoTruncate);
+  const [isExpanded, setIsExpanded] = useState(shouldAutoTruncateFlag);
   const [copied, setCopied] = useState(false);
 
   // 根据内容长度自动设置折叠状态
-  const [isCollapsed, setIsCollapsed] = useState(shouldAutoMinimize);
+  const [isCollapsed, setIsCollapsed] = useState(shouldAutoMinimizeFlag);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(() => {
-    // 如果应该自动章节折叠，默认只展开前1-2个章节
-    if (shouldAutoSectionFold) {
-      if (sections.length <= 2) return new Set(sections.map(s => s.id));
-      return new Set(sections.slice(0, 2).map(s => s.id));
+    // 如果应该自动章节折叠，默认只展开指定数量的章节
+    if (shouldAutoSectionFoldFlag) {
+      const count = finalConfig.autoFoldExpandedSections;
+      if (sections.length <= count) return new Set(sections.map(s => s.id));
+      return new Set(sections.slice(0, count).map(s => s.id));
     }
-    // 否则正常展开前3个章节
-    if (sections.length <= 3) return new Set(sections.map(s => s.id));
-    return new Set(sections.slice(0, 3).map(s => s.id));
+    // 否则正常展开指定数量的章节
+    const count = finalConfig.defaultExpandedSections;
+    if (sections.length <= count) return new Set(sections.map(s => s.id));
+    return new Set(sections.slice(0, count).map(s => s.id));
   });
 
   const toggleSection = (id: string) => {
@@ -90,7 +89,7 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   if (shouldUseSectionFolding) {
     // 整体折叠模式（显示摘要）
     if (isCollapsed) {
-      const preview = content.slice(0, COLLAPSED_PREVIEW_LENGTH) + '...';
+      const preview = content.slice(0, finalConfig.collapsedPreviewLength) + '...';
       return (
         <div className="message-content">
           <div className="flex items-center gap-2">
@@ -177,10 +176,10 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
   const codeBlockCount = getCodeBlockCount(content);
   const nonCodeLength = getNonCodeLength(content);
 
-  const useAggressiveTruncate = codeBlockCount >= 3 || nonCodeLength > AGGRESSIVE_TRUNCATE_LENGTH;
+  const useAggressiveTruncate = codeBlockCount >= 3 || nonCodeLength > finalConfig.aggressiveTruncateLength;
   const effectiveMaxLength = hasCodeBlock
-    ? (useAggressiveTruncate ? 300 : CODEBLOCK_MAX_LENGTH)
-    : maxLength;
+    ? (useAggressiveTruncate ? finalConfig.codeBlockMaxLength / 2 : finalConfig.codeBlockMaxLength)
+    : (maxLength || finalConfig.defaultMaxLength);
 
   const shouldTruncate = !isExpanded && !isStreaming && content.length > effectiveMaxLength;
   const displayContent = shouldTruncate ? content.slice(0, effectiveMaxLength) + '\n\n... (点击展开查看更多)' : content;
@@ -188,7 +187,7 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
 
   // 整体折叠模式（显示摘要）
   if (isCollapsed && !isStreaming) {
-    const preview = content.slice(0, COLLAPSED_PREVIEW_LENGTH) + '...';
+    const preview = content.slice(0, finalConfig.collapsedPreviewLength) + '...';
     return (
       <div className="message-content">
         <div className="flex items-center gap-2">
@@ -238,7 +237,7 @@ export function MessageContent({ content, maxLength = DEFAULT_MAX_LENGTH, isStre
       )}
 
       {/* 最小化按钮 */}
-      {!isStreaming && content.length > COLLAPSED_PREVIEW_LENGTH && (
+      {!isStreaming && content.length > finalConfig.collapsedPreviewLength && (
         <Button
           variant="ghost"
           size="sm"
