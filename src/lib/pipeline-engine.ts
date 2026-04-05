@@ -188,7 +188,7 @@ export class PipelineEngine {
         .from('conversations')
         .insert({
           title: conversationTitle,
-          type: 'group', // 使用 group 类型，表示这是一个项目会话
+          type: 'pipeline', // 使用 pipeline 类型，表示这是流水线会话
           project_id: pipeline.project_id || null, // 绑定到项目
           config: {
             pipeline_id: pipeline.id,
