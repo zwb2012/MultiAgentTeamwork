@@ -572,7 +572,7 @@ export default function ConversationsPage() {
                               ) : (
                                 <Checkbox
                                   checked={isSelected}
-                                  onCheckedChange={() => toggleAgentSelection(agent.id)}
+                                  className="pointer-events-none"
                                 />
                               )}
                               <Avatar className="h-6 w-6">
@@ -1011,7 +1011,7 @@ export default function ConversationsPage() {
                             >
                               <Checkbox
                                 checked={selectedNewAgentIds.includes(agent.id)}
-                                onCheckedChange={() => {}}
+                                className="pointer-events-none"
                               />
                               <Avatar className="h-6 w-6">
                                 <AvatarFallback className="bg-primary/10">
