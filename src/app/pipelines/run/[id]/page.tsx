@@ -236,8 +236,10 @@ export default function PipelineRunDetailPage() {
     
     try {
       setCancelling(true);
-      const response = await fetch(`/api/pipeline-runs/${runId}/cancel`, {
-        method: 'POST'
+      const response = await fetch(`/api/pipeline-runs/${runId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'cancel' })
       });
       
       const result = await response.json();
