@@ -198,7 +198,9 @@ export default function ConversationDetailPage() {
 
                   if (messageType && messageType !== currentStreamMessageType) {
                     // 新的消息类型，创建新的消息对象
-                    const newMsgId = `ai-${messageType}-${Date.now()}`;
+                    const timestamp = Date.now();
+                    const randomId = Math.random().toString(36).substr(2, 9);
+                    const newMsgId = `ai-${messageType}-${timestamp}-${randomId}`;
                     setCurrentStreamMessageId(newMsgId);
                     setCurrentStreamMessageType(messageType);
 

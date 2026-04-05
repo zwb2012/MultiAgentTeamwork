@@ -471,10 +471,11 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
           // 发送协调者的分析消息
           const analysisMsg = `🤖 协调者正在协调 ${mentionedAgents.length} 个智能体...\n\n任务分析: ${coordinatorAnalysis.replace(/```json[\s\S]*?```/g, '').trim()}`;
           const analysisSSE = JSON.stringify({
-            type: 'coordinator',
+            type: 'coordinator_analysis',
             agent_name: '协调者',
             content: analysisMsg,
-            coordinator_mode: true
+            coordinator_mode: true,
+            stage: 'analysis'
           });
           controller.enqueue(encoder.encode(`data: ${analysisSSE}\n\n`));
 
@@ -569,16 +570,29 @@ ${r.response}
               const text = chunk.content.toString();
               summary += text;
 
-              // 流式发送总结
+              // 流式发送总结（使用独立的type，确保前端识别为新消息）
               const summarySSE = JSON.stringify({
-                type: 'coordinator',
+                type: 'coordinator_summary',
                 agent_name: '协调者',
-                content: text,
-                coordinator_mode: true
+                content: text,  // 增量内容
+                coordinator_mode: true,
+                stage: 'summary',
+                is_complete: false
               });
               controller.enqueue(encoder.encode(`data: ${summarySSE}\n\n`));
             }
           }
+
+          // 发送完成信号
+          const completeSSE = JSON.stringify({
+            type: 'coordinator_summary',
+            agent_name: '协调者',
+            content: '',
+            coordinator_mode: true,
+            stage: 'summary',
+            is_complete: true
+          });
+          controller.enqueue(encoder.encode(`data: ${completeSSE}\n\n`));
 
           // 保存总结消息
           await client
