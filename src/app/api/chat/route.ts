@@ -468,32 +468,9 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
             }));
           }
 
-          // 发送协调者的分析消息
+          // 协调者分析消息（不发送给前端，只在后台分析）
           const analysisMsg = `🤖 协调者正在协调 ${mentionedAgents.length} 个智能体...\n\n任务分析: ${coordinatorAnalysis.replace(/```json[\s\S]*?```/g, '').trim()}`;
-          const analysisSSE = JSON.stringify({
-            type: 'coordinator_analysis',
-            agent_name: '协调者',
-            content: analysisMsg,
-            coordinator_mode: true,
-            stage: 'analysis'
-          });
-          controller.enqueue(encoder.encode(`data: ${analysisSSE}\n\n`));
-
-          // 保存协调者分析消息
-          await client
-            .from('messages')
-            .insert({
-              conversation_id,
-              agent_id: mentionedAgents[0].id,
-              role: 'assistant',
-              content: analysisMsg,
-              message_type: 'text',
-              metadata: {
-                agent_name: '协调者',
-                coordinator_mode: true,
-                coordinator_stage: 'analysis'
-              }
-            });
+          console.log('[协调者分析]', analysisMsg);
 
           // 步骤2: 逐个调用智能体
           const agentResponses: any[] = [];
@@ -537,78 +514,6 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                 }
               });
           }
-
-          // 步骤3: 协调者生成总结
-          const summaryPrompt = `以下是多个智能体对用户需求的回复，请总结并整合：
-
-用户需求: ${user_message}
-
-智能体回复:
-${agentResponses.map(r => `
-## ${r.agent_name} 的回复
-${r.response}
-`).join('\n')}
-
-请以清晰的方式总结所有智能体的观点，并提供最终的结论或建议。`;
-
-          const summaryStream = llmClient.stream(
-            [
-              { role: 'system', content: '你是一个协调者，负责总结多个智能体的回复。' },
-              { role: 'user', content: summaryPrompt }
-            ],
-            {
-              model: 'doubao-seed-1-8-251228',
-              temperature: 0.7,
-              thinking: 'disabled',
-              caching: 'disabled'
-            }
-          );
-
-          let summary = '';
-          for await (const chunk of summaryStream) {
-            if (chunk.content) {
-              const text = chunk.content.toString();
-              summary += text;
-
-              // 流式发送总结（使用独立的type，确保前端识别为新消息）
-              const summarySSE = JSON.stringify({
-                type: 'coordinator_summary',
-                agent_name: '协调者',
-                content: text,  // 增量内容
-                coordinator_mode: true,
-                stage: 'summary',
-                is_complete: false
-              });
-              controller.enqueue(encoder.encode(`data: ${summarySSE}\n\n`));
-            }
-          }
-
-          // 发送完成信号
-          const completeSSE = JSON.stringify({
-            type: 'coordinator_summary',
-            agent_name: '协调者',
-            content: '',
-            coordinator_mode: true,
-            stage: 'summary',
-            is_complete: true
-          });
-          controller.enqueue(encoder.encode(`data: ${completeSSE}\n\n`));
-
-          // 保存总结消息
-          await client
-            .from('messages')
-            .insert({
-              conversation_id,
-              agent_id: mentionedAgents[0].id,
-              role: 'assistant',
-              content: summary,
-              message_type: 'text',
-              metadata: {
-                agent_name: '协调者',
-                coordinator_mode: true,
-                coordinator_stage: 'summary'
-              }
-            });
 
           // 更新所有智能体状态为空闲
           await Promise.all(
