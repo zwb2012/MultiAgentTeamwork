@@ -445,7 +445,7 @@ export default function ConversationsPage() {
 
   // 会话类型选项
   const typeOptions = [
-    { value: 'all', label: '全局', icon: LayoutGrid },
+    { value: 'all', label: viewMode === 'all' ? '全局' : '全部', icon: LayoutGrid },
     { value: 'lobby', label: '大厅', icon: Globe },
     { value: 'private', label: '私聊', icon: User },
     { value: 'group', label: '群组', icon: Users },
