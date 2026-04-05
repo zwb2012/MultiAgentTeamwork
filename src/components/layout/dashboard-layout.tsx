@@ -62,6 +62,11 @@ const navItems: NavItem[] = [
         title: '项目智能体',
         href: '/project-agents',
         icon: <Bot className="h-4 w-4" />
+      },
+      {
+        title: '健康检测日志',
+        href: '/health-logs',
+        icon: <FileText className="h-4 w-4" />
       }
     ]
   },
@@ -128,11 +133,6 @@ const navItems: NavItem[] = [
         title: '大模型配置',
         href: '/model-configs',
         icon: <Server className="h-4 w-4" />
-      },
-      {
-        title: '健康日志',
-        href: '/health-logs',
-        icon: <FileText className="h-4 w-4" />
       }
     ]
   }
