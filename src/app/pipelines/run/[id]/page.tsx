@@ -9,7 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
   ArrowLeft,
   ArrowRight,
   GitBranch,
@@ -25,7 +30,8 @@ import {
   Zap,
   AlertCircle,
   RefreshCw,
-  Square
+  Square,
+  ChevronDown
 } from 'lucide-react';
 import { MessageContent } from '@/components/chat/MessageContent';
 
@@ -151,6 +157,7 @@ export default function PipelineRunDetailPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [collapsedMessages, setCollapsedMessages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -227,6 +234,24 @@ export default function PipelineRunDetailPage() {
     const { total_nodes, completed_nodes, failed_nodes } = data.summary;
     if (total_nodes === 0) return 0;
     return Math.round(((completed_nodes + failed_nodes) / total_nodes) * 100);
+  };
+
+  // 切换消息折叠状态
+  const toggleMessageCollapse = (messageId: string) => {
+    setCollapsedMessages(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  // 检查消息是否折叠
+  const isMessageCollapsed = (messageId: string) => {
+    return !collapsedMessages.has(messageId);
   };
 
   // 取消运行
@@ -617,32 +642,54 @@ export default function PipelineRunDetailPage() {
                 <CardContent>
                   <ScrollArea className="h-[300px] pr-4">
                     <div className="space-y-3">
-                      {data.messages.map(message => (
-                        <div key={message.id} className="flex gap-3">
-                          <div className="flex-shrink-0">
-                            {message.agents ? (
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <Bot className="h-4 w-4 text-primary" />
+                      {data.messages.map(message => {
+                        const isCollapsed = isMessageCollapsed(message.id);
+                        const previewText = message.content.slice(0, 50) + (message.content.length > 50 ? '...' : '');
+
+                        return (
+                          <Collapsible
+                            key={message.id}
+                            open={isCollapsed}
+                            onOpenChange={() => toggleMessageCollapse(message.id)}
+                            className="border rounded-lg"
+                          >
+                            <CollapsibleTrigger className="w-full flex gap-3 p-3 hover:bg-muted/50 transition-colors">
+                              <div className="flex-shrink-0">
+                                {message.agents ? (
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Bot className="h-4 w-4 text-primary" />
+                                  </div>
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                    <User className="h-4 w-4 text-muted-foreground" />
+                                  </div>
+                                )}
                               </div>
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                                <User className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex-1 min-w-0 text-left">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm">
+                                    {message.agents?.name || '系统'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(message.created_at).toLocaleTimeString('zh-CN')}
+                                  </span>
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-1 truncate">
+                                  {isCollapsed ? previewText : message.content.slice(0, 100)}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm">
-                                {message.agents?.name || '系统'}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(message.created_at).toLocaleTimeString('zh-CN')}
-                              </span>
-                            </div>
-                            <MessageContent content={message.content} isStreaming={false} />
-                          </div>
-                        </div>
-                      ))}
+                              <ChevronDown className={`h-4 w-4 flex-shrink-0 transition-transform ${
+                                isCollapsed ? 'rotate-180' : ''
+                              }`} />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="px-3 pb-3">
+                              <div className="ml-11">
+                                <MessageContent content={message.content} isStreaming={false} />
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                   
