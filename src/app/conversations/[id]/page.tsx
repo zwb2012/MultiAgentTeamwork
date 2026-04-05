@@ -563,13 +563,31 @@ export default function ConversationDetailPage() {
                     )}
                     <div className={`max-w-[70%] ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3 relative group`}>
                       {!isUser && (
-                        <div className="text-xs font-medium mb-1 text-muted-foreground">
-                          {displayName}
-                          {isCoordinator && (
-                            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-4">
-                              协调者
-                            </Badge>
-                          )}
+                        <div className="text-xs font-medium mb-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-muted-foreground">{displayName}</span>
+                            {isCoordinator && (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                协调者
+                              </Badge>
+                            )}
+                            {!isCoordinator && agent && (
+                              <>
+                                {agent.project_id ? (
+                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                    {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                    全局
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                  {getRoleLabel(agent.role)}
+                                </Badge>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
                       <MessageContent content={msg.content} isStreaming={false} />
@@ -595,9 +613,23 @@ export default function ConversationDetailPage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="max-w-[70%] bg-muted rounded-lg p-3">
-                    <div className="text-xs font-medium mb-1 text-muted-foreground">
-                      {respondingAgent.name}
-                      <Loader2 className="inline h-3 w-3 ml-2 animate-spin" />
+                    <div className="text-xs font-medium mb-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-muted-foreground">{respondingAgent.name}</span>
+                        <Loader2 className="inline h-3 w-3 animate-spin" />
+                        {respondingAgent.project_id ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                            {projects.find(p => p.id === respondingAgent.project_id)?.name || '未知项目'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                            全局
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                          {getRoleLabel(respondingAgent.role)}
+                        </Badge>
+                      </div>
                     </div>
                     <MessageContent content={streamingMessage} isStreaming={true} />
                   </div>
