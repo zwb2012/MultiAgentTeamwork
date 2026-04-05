@@ -183,14 +183,14 @@ export default function ConversationsPage() {
       alert('请输入会话标题');
       return;
     }
-    
+
     if (createForm.type !== 'lobby' && createForm.selectedAgents.length === 0) {
       alert('请选择至少一个参与者');
       return;
     }
 
-    // 如果是项目会话模式，自动关联当前项目
-    const projectId = viewMode === 'project' ? selectedProjectId : createForm.project_id;
+    // 如果是项目会话模式，自动关联当前项目；全局会话模式不关联项目
+    const projectId = viewMode === 'project' ? selectedProjectId : null;
 
     try {
       const response = await fetch('/api/conversations', {
@@ -199,13 +199,13 @@ export default function ConversationsPage() {
         body: JSON.stringify({
           title: createForm.title,
           type: createForm.type,
-          project_id: projectId || null,
+          project_id: projectId,
           agent_ids: createForm.selectedAgents
         })
       });
-      
+
       const result = await response.json();
-      
+
       if (result.success) {
         setIsCreateDialogOpen(false);
         fetchConversations(viewMode === 'project' ? selectedProjectId : undefined);
@@ -325,7 +325,12 @@ export default function ConversationsPage() {
     if (activeType !== 'all' && conv.type !== activeType) {
       return false;
     }
-    
+
+    // 在全局会话模式下，过滤掉项目会话
+    if (viewMode === 'all' && conv.project_id) {
+      return false;
+    }
+
     // 搜索过滤
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -334,7 +339,7 @@ export default function ConversationsPage() {
         conv.description?.toLowerCase().includes(query)
       );
     }
-    
+
     return true;
   });
 
@@ -440,7 +445,7 @@ export default function ConversationsPage() {
 
   // 会话类型选项
   const typeOptions = [
-    { value: 'all', label: '全部', icon: LayoutGrid },
+    { value: 'all', label: '全局', icon: LayoutGrid },
     { value: 'lobby', label: '大厅', icon: Globe },
     { value: 'private', label: '私聊', icon: User },
     { value: 'group', label: '群组', icon: Users },
@@ -454,7 +459,9 @@ export default function ConversationsPage() {
         <div>
           <h1 className="text-3xl font-bold">会话中心</h1>
           <p className="text-muted-foreground mt-1">
-            管理多智能体对话会话，支持私聊、群组和流水线模式
+            {viewMode === 'all'
+              ? '全局会话：查看所有非项目关联的对话'
+              : '项目会话：查看和管理特定项目的对话'}
           </p>
         </div>
         
@@ -469,10 +476,9 @@ export default function ConversationsPage() {
             <DialogHeader>
               <DialogTitle>创建新会话</DialogTitle>
               <DialogDescription>
-                {viewMode === 'project' 
+                {viewMode === 'project'
                   ? `为项目「${projects.find(p => p.id === selectedProjectId)?.name}」创建会话`
-                  : '选择会话类型并配置参与者'
-                }
+                  : '创建全局会话（不关联项目）'}
               </DialogDescription>
             </DialogHeader>
             
@@ -515,27 +521,6 @@ export default function ConversationsPage() {
                   placeholder="输入会话标题"
                 />
               </div>
-
-              {/* 项目选择 - 仅在全部会话模式下显示 */}
-              {viewMode === 'all' && (
-                <div className="space-y-2">
-                  <Label>关联项目（可选）</Label>
-                  <Select
-                    value={createForm.project_id || 'none'}
-                    onValueChange={(v) => setCreateForm(prev => ({ ...prev, project_id: v === 'none' ? null : v }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="选择项目" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">不关联项目</SelectItem>
-                      {projects.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
 
               {/* 选择参与者 */}
               {createForm.type !== 'lobby' && (
@@ -638,13 +623,13 @@ export default function ConversationsPage() {
             onClick={() => setViewMode('all')}
             className={cn(
               "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-all",
-              viewMode === 'all' 
-                ? "bg-background text-foreground shadow-sm" 
+              viewMode === 'all'
+                ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
             <LayoutGrid className="h-4 w-4" />
-            全部会话
+            全局会话
           </button>
           <button
             onClick={() => setViewMode('project')}
