@@ -260,7 +260,7 @@ async function checkLLMAgent(
         };
       } else {
         const errorBody = await response.text();
-        let details = errorBody.substring(0, 200);
+        const details = errorBody.substring(0, 200);
         
         if (response.status === 401) {
           return {
@@ -311,7 +311,7 @@ async function checkLLMAgent(
         };
       } else {
         const errorBody = await response.text();
-        let details = errorBody.substring(0, 200);
+        const details = errorBody.substring(0, 200);
         
         if (response.status === 401) {
           return {

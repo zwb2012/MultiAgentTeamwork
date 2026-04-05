@@ -199,7 +199,7 @@ function ProjectAgentsContent() {
 
   const fetchAgents = async () => {
     try {
-      let url = '/api/agents?is_template=false';
+      const url = '/api/agents?is_template=false';
       const response = await fetch(url);
       const result = await response.json();
       
