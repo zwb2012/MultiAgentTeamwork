@@ -141,7 +141,7 @@ export default function ConversationDetailPage() {
     try {
       // 先添加用户消息到界面
       const userMsg: Message = {
-        id: `temp-${Date.now()}`,
+        id: `temp-${Date.now()}-${Math.random()}`, // 添加随机数避免并发冲突
         conversation_id: conversationId,
         role: 'user',
         content: userMessage,
@@ -277,7 +277,7 @@ export default function ConversationDetailPage() {
       // 兼容旧的单智能体模式（没有使用多智能体协调）
       if (fullContent && !currentStreamMessageId) {
         const aiMsg: Message = {
-          id: `ai-${Date.now()}`,
+          id: `ai-${Date.now()}-${Math.random()}`, // 添加随机数避免并发冲突
           conversation_id: conversationId,
           agent_id: respondingAgent?.id,
           role: 'assistant',
@@ -676,39 +676,7 @@ export default function ConversationDetailPage() {
                   </div>
                 );
               })}
-              
-              {/* 流式输出中的消息 */}
-              {streamingMessage && respondingAgent && (
-                <div className="flex gap-3 justify-start">
-                  <Avatar className="h-8 w-8 mt-1">
-                    <AvatarFallback className="bg-primary/10">
-                      <Bot className="h-4 w-4" />
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="max-w-[70%] bg-muted rounded-lg p-3">
-                    <div className="text-xs font-medium mb-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-muted-foreground">{respondingAgent.name}</span>
-                        <Loader2 className="inline h-3 w-3 animate-spin" />
-                        {respondingAgent.project_id ? (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                            {projects.find(p => p.id === respondingAgent.project_id)?.name || '未知项目'}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                            全局
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                          {getRoleLabel(respondingAgent.role)}
-                        </Badge>
-                      </div>
-                    </div>
-                    <MessageContent content={streamingMessage} isStreaming={true} />
-                  </div>
-                </div>
-              )}
-              
+
               <div ref={messagesEndRef} />
             </div>
           )}
