@@ -326,7 +326,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <main
         className={cn(
           "transition-all duration-300",
-          sidebarOpen ? "ml-64" : "ml-16"
+          sidebarOpen ? "ml-[16.5rem]" : "ml-[4.5rem]"
         )}
       >
         {children}
