@@ -443,7 +443,14 @@ async function handleMultipleAgentsWithCoordinator(
             if (value) {
               const text = value.toString();
               fullResponse += text;
-              controller.enqueue(value);
+              // 转换为SSE格式
+              const sseData = JSON.stringify({
+                content: text,
+                agent_id: mentionedAgents[0].id,
+                agent_name: '协调者',
+                coordinator_mode: true
+              });
+              controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
             }
           }
 

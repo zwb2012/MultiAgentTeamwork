@@ -61,6 +61,7 @@ export default function ConversationDetailPage() {
   // 管理参与者相关状态
   const [showManageDialog, setShowManageDialog] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(false);
   const [managingParticipants, setManagingParticipants] = useState(false);
@@ -105,6 +106,13 @@ export default function ConversationDetailPage() {
             id: p.agent_id || p.agents.id
           }));
         setParticipants(participantsData);
+      }
+      
+      // 获取项目列表（用于显示参与者所属项目）
+      const projectsRes = await fetch('/api/projects');
+      const projectsResult = await projectsRes.json();
+      if (projectsResult.success) {
+        setProjects(projectsResult.data || []);
       }
       
       // 获取消息列表
@@ -391,6 +399,21 @@ export default function ConversationDetailPage() {
     return labels[type] || type;
   };
 
+  // 获取角色标签
+  const getRoleLabel = (role?: string) => {
+    const roleMap: Record<string, string> = {
+      developer: '开发工程师',
+      frontend_dev: '前端工程师',
+      backend_dev: '后端工程师',
+      tester: '测试工程师',
+      reviewer: '代码审核',
+      architect: '架构师',
+      pm: '产品经理',
+      custom: '自定义'
+    };
+    return roleMap[role || 'developer'] || role || '开发工程师';
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -443,8 +466,19 @@ export default function ConversationDetailPage() {
                   <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-background ${getOnlineStatus(agent.online_status)}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{agent.name}</div>
-                  <div className="text-xs text-muted-foreground">{agent.role}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium truncate">{agent.name}</span>
+                    {agent.project_id ? (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                        {projects.find(p => p.id === agent.project_id)?.name || '未知项目'}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                        全局
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{getRoleLabel(agent.role)}</div>
                 </div>
                 {respondingAgent?.id === agent.id && (
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
