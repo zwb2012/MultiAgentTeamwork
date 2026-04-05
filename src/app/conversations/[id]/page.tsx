@@ -169,15 +169,16 @@ export default function ConversationDetailPage() {
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let fullContent = '';
-      
+      let sseMetadata: Record<string, any> = {}; // 保存SSE元数据
+
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
+
           const chunk = decoder.decode(value);
           const lines = chunk.split('\n');
-          
+
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
@@ -190,7 +191,15 @@ export default function ConversationDetailPage() {
                 if (parsed.content) {
                   fullContent += parsed.content;
                   setStreamingMessage(fullContent);
-                  
+
+                  // 保存SSE元数据（如coordinator_mode、agent_name等）
+                  if (parsed.coordinator_mode) {
+                    sseMetadata.coordinator_mode = true;
+                  }
+                  if (parsed.agent_name) {
+                    sseMetadata.agent_name = parsed.agent_name;
+                  }
+
                   // 设置响应的智能体
                   if (parsed.agent_id && !respondingAgent) {
                     const agent = participants.find(a => a.id === parsed.agent_id);
@@ -207,7 +216,7 @@ export default function ConversationDetailPage() {
           }
         }
       }
-      
+
       // 添加 AI 回复到消息列表
       if (fullContent) {
         const aiMsg: Message = {
@@ -217,7 +226,9 @@ export default function ConversationDetailPage() {
           role: 'assistant',
           content: fullContent,
           created_at: new Date().toISOString(),
-          message_type: 'text'
+          message_type: 'text',
+          // 包含从SSE解析的元数据
+          metadata: Object.keys(sseMetadata).length > 0 ? sseMetadata : undefined
         };
         setMessages(prev => [...prev, aiMsg]);
       }
@@ -524,7 +535,18 @@ export default function ConversationDetailPage() {
           ) : (
             <div className="space-y-4">
               {messages.map((msg, index) => {
-                const agent = participants.find(a => a.id === msg.agent_id);
+                // 如果是协调者模式，优先显示metadata中的agent_name
+                const isCoordinator = msg.metadata?.coordinator_mode;
+                const coordinatorName = msg.metadata?.agent_name || '协调者';
+                
+                // 非协调者模式下从participants查找
+                const agent = isCoordinator 
+                  ? null 
+                  : participants.find(a => a.id === msg.agent_id);
+                const displayName = isCoordinator 
+                  ? coordinatorName 
+                  : (agent?.name || '未知智能体');
+                
                 const isUser = msg.role === 'user';
                 
                 return (
@@ -540,9 +562,14 @@ export default function ConversationDetailPage() {
                       </Avatar>
                     )}
                     <div className={`max-w-[70%] ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3 relative group`}>
-                      {!isUser && agent && (
+                      {!isUser && (
                         <div className="text-xs font-medium mb-1 text-muted-foreground">
-                          {agent.name}
+                          {displayName}
+                          {isCoordinator && (
+                            <Badge variant="outline" className="ml-2 text-[10px] px-1.5 py-0 h-4">
+                              协调者
+                            </Badge>
+                          )}
                         </div>
                       )}
                       <MessageContent content={msg.content} isStreaming={false} />
