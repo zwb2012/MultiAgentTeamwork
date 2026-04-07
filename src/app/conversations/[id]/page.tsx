@@ -132,6 +132,7 @@ export default function ConversationDetailPage() {
   // 智能滚动控制（使用 useRef 避免不必要的重渲染）
   const shouldAutoScrollRef = useRef(true);
   const isUserScrolledRef = useRef(false);
+  const lastScrollTopRef = useRef(0);
 
   // 监听滚动事件
   useEffect(() => {
@@ -144,13 +145,27 @@ export default function ConversationDetailPage() {
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       const atBottom = distanceFromBottom <= threshold;
 
+      console.log('滚动事件:', {
+        scrollTop,
+        scrollHeight,
+        clientHeight,
+        distanceFromBottom,
+        atBottom,
+        lastScrollTop: lastScrollTopRef.current
+      });
+
+      // 记录上次的滚动位置
+      lastScrollTopRef.current = scrollTop;
+
       if (atBottom) {
         // 用户滚动到底部，恢复自动滚动
         shouldAutoScrollRef.current = true;
         isUserScrolledRef.current = false;
+        console.log('✓ 用户滚动到底部，恢复自动滚动');
       } else {
         // 用户滚动到非底部位置，完全停止自动滚动
         isUserScrolledRef.current = true;
+        console.log('✗ 用户滚动到非底部位置，停止自动滚动');
       }
     };
 
@@ -162,8 +177,19 @@ export default function ConversationDetailPage() {
 
   // 智能自动滚动：只有当用户没有手动滚动时才自动滚动
   useEffect(() => {
+    console.log('检查自动滚动:', {
+      shouldAutoScroll: shouldAutoScrollRef.current,
+      isUserScrolled: isUserScrolledRef.current,
+      willScroll: shouldAutoScrollRef.current && !isUserScrolledRef.current,
+      messagesLength: messages.length,
+      hasStreaming: !!streamingMessage
+    });
+
     if (shouldAutoScrollRef.current && !isUserScrolledRef.current) {
+      console.log('⬇️ 执行自动滚动到底部');
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      console.log('⏹️ 不执行自动滚动，保持当前位置');
     }
   }, [messages, streamingMessage]);
   // 管理参与者相关状态
@@ -282,6 +308,32 @@ export default function ConversationDetailPage() {
           parallel_mode: msg.metadata?.parallel_mode === true
         }));
         setMessages(messagesWithParallelMode);
+
+        // 消息加载完成后，检查滚动状态
+        setTimeout(() => {
+          if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const threshold = 20; // 底部20px内算作底部
+            const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+            const atBottom = distanceFromBottom <= threshold;
+
+            console.log('消息加载完成后的滚动状态:', {
+              scrollTop,
+              scrollHeight,
+              clientHeight,
+              distanceFromBottom,
+              atBottom
+            });
+
+            // 如果用户不在底部附近，标记为已手动滚动
+            if (!atBottom) {
+              isUserScrolledRef.current = true;
+              console.log('✗ 消息加载完成，用户不在底部，停止自动滚动');
+            } else {
+              console.log('✓ 消息加载完成，用户在底部，恢复自动滚动');
+            }
+          }
+        }, 100);
       }
     } catch (error) {
       console.error('获取会话详情失败:', error);
@@ -296,6 +348,27 @@ export default function ConversationDetailPage() {
     const userMessage = inputMessage.trim();
     setInputMessage('');
     setSending(true);
+
+    // 发送消息时，重置滚动状态，让新消息可以自动滚动到底部
+    // 只有当用户在底部附近时，才自动滚动
+    if (scrollRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      const threshold = 100; // 底部100px内算作底部
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      const atBottom = distanceFromBottom <= threshold;
+
+      console.log('发送消息时的滚动状态:', { distanceFromBottom, atBottom });
+
+      if (atBottom) {
+        // 用户在底部附近，恢复自动滚动
+        shouldAutoScrollRef.current = true;
+        isUserScrolledRef.current = false;
+        console.log('用户在底部附近，恢复自动滚动');
+      } else {
+        // 用户不在底部附近，保持当前状态
+        console.log('用户不在底部附近，保持当前滚动状态');
+      }
+    }
 
     try {
       // 先添加用户消息到界面
