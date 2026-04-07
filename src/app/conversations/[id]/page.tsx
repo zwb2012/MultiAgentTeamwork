@@ -174,7 +174,8 @@ export default function ConversationDetailPage() {
     // 只有当用户在底部时，才自动滚动
     if (!isUserScrolledAway.current) {
       console.log('⬇️ 执行自动滚动到底部');
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      // 使用 behavior: 'auto' 避免平滑滚动触发多次 scroll 事件
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     } else {
       console.log('⏹️ 不执行自动滚动，用户已滚离底部');
     }
@@ -300,7 +301,8 @@ export default function ConversationDetailPage() {
           if (scrollRef.current) {
             console.log('✓ 消息加载完成，自动滚动到最下面');
             isUserScrolledAway.current = false; // 回到底部
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            // 使用 behavior: 'auto' 避免平滑滚动触发多次 scroll 事件
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
           }
         }, 100);
       }
