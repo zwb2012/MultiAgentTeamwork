@@ -52,7 +52,7 @@ const messageStyles = `
   }
 
   .agent-name {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     color: #1a1a1a;
   }
@@ -64,7 +64,7 @@ const messageStyles = `
   }
 
   .badge {
-    font-size: 10px;
+    font-size: 9px;
     padding: 2px 6px;
     border-radius: 4px;
     white-space: nowrap;
@@ -72,7 +72,7 @@ const messageStyles = `
   }
 
   .timestamp {
-    font-size: 11px;
+    font-size: 10px;
     color: #999999;
     margin-left: auto;
   }
