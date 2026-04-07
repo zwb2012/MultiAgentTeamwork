@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,8 @@ import {
   UserPlus,
   MoreHorizontal,
   Trash2,
-  AtSign
+  AtSign,
+  Square
 } from 'lucide-react';
 import type { Conversation, Message } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
@@ -126,7 +127,64 @@ export default function ConversationDetailPage() {
   const [currentStreamMessageType, setCurrentStreamMessageType] = useState<'coordinator' | 'agent' | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
+  // 智能滚动控制
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 检测是否在底部附近
+  const checkIfAtBottom = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    const threshold = 100; // 底部100px内算作在底部
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    const atBottom = distanceFromBottom <= threshold;
+    setIsAtBottom(atBottom);
+    return atBottom;
+  }, []);
+
+  // 监听滚动事件
+  useEffect(() => {
+    const scrollContainer = scrollRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      // 清除之前的 timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      // 检测是否在底部
+      const atBottom = checkIfAtBottom();
+      if (!atBottom) {
+        // 用户滚动到了非底部位置，标记为用户正在滚动
+        setIsUserScrolling(true);
+      }
+
+      // 1秒后如果还在底部，恢复自动滚动
+      scrollTimeoutRef.current = setTimeout(() => {
+        if (checkIfAtBottom()) {
+          setIsUserScrolling(false);
+        }
+      }, 1000);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [checkIfAtBottom]);
+
+  // 智能自动滚动：只有在用户没有手动滚动且在底部附近时才自动滚动
+  useEffect(() => {
+    if (!isUserScrolling && isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, streamingMessage, isUserScrolling, isAtBottom]);
   // 管理参与者相关状态
   const [showManageDialog, setShowManageDialog] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
@@ -140,15 +198,24 @@ export default function ConversationDetailPage() {
   const [mentionSearch, setMentionSearch] = useState('');
   const [cursorPosition, setCursorPosition] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetchConversation();
   }, [conversationId]);
 
-  // 自动滚动到底部
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingMessage]);
+  // 停止生成
+  const handleStopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setAiResponding(false);
+    setStreamingMessage('');
+    setCurrentStreamMessageId(null);
+    setCurrentStreamMessageType(null);
+    setRespondingAgent(null);
+  };
 
   const fetchConversation = async () => {
     try {
@@ -220,18 +287,22 @@ export default function ConversationDetailPage() {
         message_type: 'text'
       };
       setMessages(prev => [...prev, userMsg]);
-      
+
       // 调用 chat API 获取 AI 回复（流式输出）
       setAiResponding(true);
       setStreamingMessage('');
-      
+
+      // 创建 AbortController 用于中断请求
+      abortControllerRef.current = new AbortController();
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversation_id: conversationId,
           user_message: userMessage
-        })
+        }),
+        signal: abortControllerRef.current.signal
       });
       
       if (!response.ok) {
@@ -419,9 +490,15 @@ export default function ConversationDetailPage() {
       
     } catch (error) {
       console.error('发送消息失败:', error);
-      alert(error instanceof Error ? error.message : '发送失败');
-      // 移除失败的用户消息
-      setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
+
+      // 如果是用户主动停止，不显示错误
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('用户停止了生成');
+      } else {
+        alert(error instanceof Error ? error.message : '发送失败');
+        // 移除失败的用户消息
+        setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
+      }
     } finally {
       setSending(false);
       setAiResponding(false);
@@ -429,6 +506,7 @@ export default function ConversationDetailPage() {
       setRespondingAgent(null);
       setCurrentStreamMessageId(null);
       setCurrentStreamMessageType(null);
+      abortControllerRef.current = null;
     }
   };
 
@@ -924,13 +1002,19 @@ export default function ConversationDetailPage() {
                 </div>
               )}
             </div>
-            <Button onClick={handleSendMessage} disabled={sending || aiResponding || !inputMessage.trim()}>
-              {sending || aiResponding ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
+            {aiResponding ? (
+              <Button onClick={handleStopGeneration} variant="destructive">
+                <Square className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button onClick={handleSendMessage} disabled={sending || aiResponding || !inputMessage.trim()}>
+                {sending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
