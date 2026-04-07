@@ -11,6 +11,7 @@ interface MessageContentProps {
   content: string;
   maxLength?: number;
   isStreaming?: boolean;
+  parallelMode?: boolean; // 是否为多智能体并行模式
 }
 
 interface Section {
@@ -20,7 +21,7 @@ interface Section {
   id: string;
 }
 
-export function MessageContent({ content, maxLength, isStreaming = false }: MessageContentProps) {
+export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false }: MessageContentProps) {
   // 从全局配置获取消息折叠配置
   const finalConfig = useMessageConfig();
 
@@ -36,7 +37,8 @@ export function MessageContent({ content, maxLength, isStreaming = false }: Mess
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  const shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
+  // 多智能体模式默认折叠，单智能体模式使用原有的折叠逻辑
+  const shouldAutoMinimizeFlag = parallelMode ? true : shouldAutoMinimize(content, isStreaming, finalConfig);
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
   const shouldAutoTruncateFlag = shouldAutoTruncate(content, isStreaming, finalConfig);
 

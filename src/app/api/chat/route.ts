@@ -491,7 +491,8 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                 project_id: agent.project_id,
                 role: agent.role,
                 msg_id: msgId,
-                content: ''
+                content: '',
+                parallel_mode: true
               })}\n\n`
             ));
 
@@ -525,7 +526,8 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                 metadata: {
                   agent_name: agent.name,
                   project_id: agent.project_id,
-                  role: agent.role
+                  role: agent.role,
+                  parallel_mode: true
                 }
               })
               .select()

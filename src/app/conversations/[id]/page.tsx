@@ -207,7 +207,8 @@ export default function ConversationDetailPage() {
                     metadata: {
                       agent_name: parsed.agent_name,
                       project_id: parsed.project_id,
-                      role: parsed.role
+                      role: parsed.role,
+                      parallel_mode: parsed.parallel_mode || false
                     },
                     streaming: true,
                     done: false
@@ -720,7 +721,11 @@ export default function ConversationDetailPage() {
                           </div>
                         </div>
                       )}
-                      <MessageContent content={msg.content} isStreaming={msg.streaming || false} />
+                      <MessageContent 
+                        content={msg.content} 
+                        isStreaming={msg.streaming || false} 
+                        parallelMode={msg.metadata?.parallel_mode === true}
+                      />
                       {/* 流式状态指示器 */}
                       {msg.streaming && (
                         <div className="flex items-center gap-2 text-xs mt-2">
