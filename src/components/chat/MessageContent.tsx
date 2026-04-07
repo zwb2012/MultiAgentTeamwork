@@ -45,10 +45,10 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const shouldUseSectionFolding = !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  // 并行模式下强制触发最小化折叠（不管内容长短，不管是否流式输出）
+  // 并行模式下强制触发最小化折叠（用户消息除外）
   let shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
-  if (parallelMode) {
-    // 并行模式下，所有消息都默认折叠（包括流式输出期间）
+  if (parallelMode && !isUserMessage) {
+    // 并行模式下，所有非用户消息都默认折叠（包括流式输出期间）
     shouldAutoMinimizeFlag = true;
   }
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
@@ -74,11 +74,11 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
   // 当流式输出结束后，延迟更新折叠状态，避免立即切换导致格式混乱
   useEffect(() => {
-    if (!isStreaming) {
+    if (!isStreaming && !isUserMessage) {
       const timer = setTimeout(() => {
-        // 流式输出结束后，应用默认的折叠状态
+        // 流式输出结束后，应用默认的折叠状态（用户消息除外）
         let minimizeFlag = shouldAutoMinimize(content, false, finalConfig);
-        // 并行模式下，所有消息都默认折叠
+        // 并行模式下，所有非用户消息都默认折叠
         if (parallelMode) {
           minimizeFlag = true;
         }
@@ -91,7 +91,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
       return () => clearTimeout(timer);
     }
-  }, [isStreaming, content, sections.length, finalConfig.defaultExpandedSections, finalConfig, parallelMode]);
+  }, [isStreaming, content, sections.length, finalConfig.defaultExpandedSections, finalConfig, parallelMode, isUserMessage]);
 
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {
@@ -146,8 +146,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     // 章节折叠模式
     return (
       <div className="message-content space-y-2">
-        {/* 工具按钮 */}
-        {!isStreaming && (
+        {/* 工具按钮 - 用户消息不显示 */}
+        {!isStreaming && !isUserMessage && (
           <div className="flex items-center justify-start gap-2 pb-2 border-b">
             <Button
               variant="ghost"
@@ -185,7 +185,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
               {copied ? (
                 <Check className="h-3 w-3 text-green-500" />
               ) : (
-                <Copy className={`h-3 w-3 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`} />
+                <Copy className="h-3 w-3 text-muted-foreground" />
               )}
             </Button>
           </div>
@@ -220,8 +220,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const displayContent = shouldTruncate ? content.slice(0, effectiveMaxLength) + '\n\n... (点击展开查看更多)' : content;
   const needsExpandButton = content.length > effectiveMaxLength && !isStreaming;
 
-  // 整体折叠模式（显示摘要）
-  if (isCollapsed && !isStreaming) {
+  // 整体折叠模式（显示摘要）- 用户消息不显示折叠
+  if (isCollapsed && !isStreaming && !isUserMessage) {
     const preview = content.slice(0, finalConfig.collapsedPreviewLength) + '...';
     return (
       <div className="message-content">
@@ -247,8 +247,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
         {renderMarkdown(displayContent)}
       </div>
 
-      {/* 展开/收起按钮 */}
-      {needsExpandButton && (
+      {/* 展开/收起按钮 - 用户消息不显示 */}
+      {needsExpandButton && !isUserMessage && (
         <div className="mt-2">
           <Button
             variant="ghost"
@@ -271,8 +271,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
         </div>
       )}
 
-      {/* 最小化按钮 */}
-      {!isStreaming && content.length > finalConfig.collapsedPreviewLength && (
+      {/* 最小化按钮 - 用户消息不显示 */}
+      {!isStreaming && content.length > finalConfig.collapsedPreviewLength && !isUserMessage && (
         <Button
           variant="ghost"
           size="sm"
