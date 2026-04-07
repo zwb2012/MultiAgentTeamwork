@@ -185,11 +185,12 @@ export default function ConversationDetailPage() {
       hasStreaming: !!streamingMessage
     });
 
-    if (shouldAutoScrollRef.current && !isUserScrolledRef.current) {
+    // 只有当用户没有手动滚动时，才自动滚动
+    if (!isUserScrolledRef.current) {
       console.log('⬇️ 执行自动滚动到底部');
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     } else {
-      console.log('⏹️ 不执行自动滚动，保持当前位置');
+      console.log('⏹️ 不执行自动滚动，用户已手动滚动');
     }
   }, [messages, streamingMessage]);
   // 管理参与者相关状态
