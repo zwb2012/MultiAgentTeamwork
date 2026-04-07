@@ -132,6 +132,7 @@ export default function ConversationDetailPage() {
   // 智能滚动控制（微信/企微标准实现）
   const isUserScrolledAway = useRef(false); // 用户是否滚离底部
   const lastAutoScrollTime = useRef(0); // 记录上次自动滚动的时间戳
+  const isSmoothScrolling = useRef(false); // 是否正在进行平滑滚动
 
   // 监听滚动事件（当 loading 完成后绑定）
   useEffect(() => {
@@ -192,10 +193,17 @@ export default function ConversationDetailPage() {
   useEffect(() => {
     console.log('🔍 检查自动滚动:', {
       isUserScrolledAway: isUserScrolledAway.current,
-      willScroll: !isUserScrolledAway.current,
+      isSmoothScrolling: isSmoothScrolling.current,
+      willScroll: !isUserScrolledAway.current && !isSmoothScrolling.current,
       messagesLength: messages.length,
       hasStreaming: !!streamingMessage
     });
+
+    // 如果正在进行平滑滚动（用户点击"有新消息"），不执行自动滚动
+    if (isSmoothScrolling.current) {
+      console.log('⏸️ 正在平滑滚动中，跳过自动滚动');
+      return;
+    }
 
     // 只有当用户在底部时，才自动滚动
     if (!isUserScrolledAway.current) {
@@ -279,11 +287,22 @@ export default function ConversationDetailPage() {
   const scrollToBottom = () => {
     console.log('→ 用户点击"有新消息"，滚动到底部');
 
-    // 记录自动滚动时间戳
-    lastAutoScrollTime.current = Date.now();
-
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // 设置锁定标志，禁用 useEffect 的自动滚动
+    isSmoothScrolling.current = true;
     isUserScrolledAway.current = false; // 回到底部，恢复自动滚动
+
+    // 执行平滑滚动
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
+    // 在滚动动画完成后更新时间戳并解锁
+    requestAnimationFrame(() => {
+      // 再等待一帧，确保滚动动画已经开始
+      setTimeout(() => {
+        lastAutoScrollTime.current = Date.now();
+        isSmoothScrolling.current = false; // 解锁，允许 useEffect 的自动滚动
+        console.log('✅ 平滑滚动完成，更新 lastAutoScrollTime 并解锁');
+      }, 300); // 平滑滚动通常需要 300-500ms，这里取 300ms
+    });
   };
 
   const fetchConversation = async () => {
