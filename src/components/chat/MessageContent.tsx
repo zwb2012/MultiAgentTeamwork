@@ -145,64 +145,61 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
     // 章节折叠模式
     return (
-      <div className="message-content flex flex-col">
-        {/* 上半部分：工具栏 */}
-        <div className={`flex items-center justify-between border-b p-2 ${isUserMessage ? 'bg-white/10' : 'bg-muted'}`}>
-          <div className="flex gap-1.5">
+      <div className="message-content space-y-2">
+        {/* 渲染各章节 */}
+        {sections.map(section => (
+          <SectionItem
+            key={section.id}
+            section={section}
+            isExpanded={expandedSections.has(section.id)}
+            onToggle={() => toggleSection(section.id)}
+          />
+        ))}
+
+        {/* 工具按钮 */}
+        {!isStreaming && (
+          <div className="flex items-center justify-end gap-2 pt-2 border-t">
             <Button
-              variant={isUserMessage ? "ghost" : "secondary"}
+              variant="ghost"
               size="sm"
-              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
+              className="h-7 text-xs"
               onClick={() => toggleAllSections(true)}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
+              <Plus className="h-3 w-3 mr-1" />
               全部展开
             </Button>
             <Button
-              variant={isUserMessage ? "ghost" : "secondary"}
+              variant="ghost"
               size="sm"
-              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
+              className="h-7 text-xs"
               onClick={() => toggleAllSections(false)}
             >
-              <Minus className="h-3.5 w-3.5 mr-1" />
+              <Minus className="h-3 w-3 mr-1" />
               全部收起
             </Button>
             <Button
-              variant={isUserMessage ? "ghost" : "secondary"}
+              variant="ghost"
               size="sm"
-              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
+              className="h-7 text-xs"
               onClick={() => setIsCollapsed(true)}
             >
-              <ChevronUp className="h-3.5 w-3.5 mr-1" />
+              <ChevronUp className="h-3 w-3 mr-1" />
               最小化
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <Copy className={`h-3 w-3 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`} />
+              )}
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-8 px-2 ${isUserMessage ? 'hover:bg-white/20' : ''}`}
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-500" />
-            ) : (
-              <Copy className={`h-3.5 w-3.5 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`} />
-            )}
-          </Button>
-        </div>
-
-        {/* 下半部分：对话内容 */}
-        <div className="p-3 flex-1">
-          {/* 渲染各章节 */}
-          {sections.map(section => (
-            <SectionItem
-              key={section.id}
-              section={section}
-              isExpanded={expandedSections.has(section.id)}
-              onToggle={() => toggleSection(section.id)}
-            />
-          ))}
-        </div>
+        )}
       </div>
     );
   }
