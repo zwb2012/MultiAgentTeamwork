@@ -286,60 +286,100 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         let fullResponse = '';
+        let controllerClosed = false;
+        
+        // 标记 controller 为已关闭的函数
+        const closeSafely = () => {
+          if (!controllerClosed) {
+            try {
+              controller.close();
+            } catch (e) {
+              // 忽略重复关闭的错误
+            }
+            controllerClosed = true;
+          }
+        };
         
         try {
           const llmStream = llmClient.stream(messages, llmConfig);
           
           for await (const chunk of llmStream) {
+            // 如果 controller 已关闭，停止处理
+            if (controllerClosed) {
+              break;
+            }
+            
             if (chunk.content) {
               const text = chunk.content.toString();
               fullResponse += text;
               
-              // 发送数据块
-              const data = JSON.stringify({ 
-                content: text,
-                agent_id: targetAgent.id,
-                agent_name: targetAgent.name
-              });
-              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              // 安全地发送数据块
+              try {
+                const data = JSON.stringify({ 
+                  content: text,
+                  agent_id: targetAgent.id,
+                  agent_name: targetAgent.name
+                });
+                controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              } catch (e) {
+                // 如果 controller 已关闭，停止处理
+                if (e instanceof TypeError && e.message.includes('closed')) {
+                  controllerClosed = true;
+                  break;
+                }
+              }
             }
           }
           
-          // 保存AI回复
-          await client
-            .from('messages')
-            .insert({
-              conversation_id,
-              agent_id: targetAgent.id,
-              role: 'assistant',
-              content: fullResponse,
-              message_type: 'text',
-              metadata: {
-                model: llmConfig.model,
-                agent_name: targetAgent.name
-              }
-            });
+          // 只有在正常结束时（非用户终止）才保存消息和更新状态
+          if (!controllerClosed && fullResponse) {
+            // 保存AI回复
+            await client
+              .from('messages')
+              .insert({
+                conversation_id,
+                agent_id: targetAgent.id,
+                role: 'assistant',
+                content: fullResponse,
+                message_type: 'text',
+                metadata: {
+                  model: llmConfig.model,
+                  agent_name: targetAgent.name
+                }
+              });
+            
+            // 更新智能体状态为空闲
+            await client
+              .from('agents')
+              .update({ work_status: 'idle', updated_at: new Date().toISOString() })
+              .eq('id', targetAgent.id);
+            
+            // 发送完成信号
+            try {
+              controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            } catch (e) {
+              // 忽略 controller 已关闭的错误
+            }
+          }
           
-          // 更新智能体状态为空闲
-          await client
-            .from('agents')
-            .update({ work_status: 'idle', updated_at: new Date().toISOString() })
-            .eq('id', targetAgent.id);
-          
-          // 发送完成信号
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
+          closeSafely();
         } catch (error) {
-          console.error('LLM流式输出错误:', error);
-          
           // 更新智能体状态为空闲
           await client
             .from('agents')
             .update({ work_status: 'idle', updated_at: new Date().toISOString() })
             .eq('id', targetAgent.id);
           
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '生成回复失败' })}\n\n`));
-          controller.close();
+          // 尝试发送错误信息（如果 controller 还未关闭）
+          if (!controllerClosed) {
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: '生成回复失败' })}\n\n`));
+            } catch (e) {
+              // 忽略 controller 已关闭的错误
+            }
+          }
+          
+          closeSafely();
         }
       }
     });
@@ -483,36 +523,52 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
             const msgId = `ai-agent-${timestamp}-${randomId}`;
 
             // 发送开始消息（创建消息卡片）
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({
-                type: 'agent_start',
-                agent_id: agent.id,
-                agent_name: agent.name,
-                project_id: agent.project_id,
-                role: agent.role,
-                msg_id: msgId,
-                content: '',
-                parallel_mode: true
-              })}\n\n`
-            ));
+            try {
+              controller.enqueue(encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'agent_start',
+                  agent_id: agent.id,
+                  agent_name: agent.name,
+                  project_id: agent.project_id,
+                  role: agent.role,
+                  msg_id: msgId,
+                  content: '',
+                  parallel_mode: true
+                })}\n\n`
+              ));
+            } catch (e) {
+              // 如果 controller 已关闭，跳过这个智能体
+              return null;
+            }
 
             // 调用智能体（传入流式回调）
-            fullResponse = await callAgentWithStream(
-              agent,
-              call.query,
-              projectContext,
-              (chunk) => {
-                // 实时发送每个 chunk
-                controller.enqueue(encoder.encode(
-                  `data: ${JSON.stringify({
-                    type: 'agent_chunk',
-                    agent_id: agent.id,
-                    msg_id: msgId,
-                    content: chunk
-                  })}\n\n`
-                ));
-              }
-            );
+            try {
+              fullResponse = await callAgentWithStream(
+                agent,
+                call.query,
+                projectContext,
+                (chunk) => {
+                  // 实时发送每个 chunk（安全地处理 controller 关闭的情况）
+                  try {
+                    controller.enqueue(encoder.encode(
+                      `data: ${JSON.stringify({
+                        type: 'agent_chunk',
+                        agent_id: agent.id,
+                        msg_id: msgId,
+                        content: chunk
+                      })}\n\n`
+                    ));
+                  } catch (e) {
+                    // 如果 controller 已关闭，静默处理
+                    // 这是正常的终止流程，不是错误
+                  }
+                }
+              );
+            } catch (e) {
+              // 如果在调用过程中出错，跳过这个智能体
+              console.error('调用智能体失败:', e);
+              return null;
+            }
 
             // 保存完整消息到数据库
             const { data: insertedMsg, error: insertError } = await client
@@ -539,14 +595,18 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
 
             // 发送完成标记（包含数据库生成的真实消息ID）
             // 注意：不返回数据库的content字段，直接使用本地累积的fullResponse确保一致性
-            controller.enqueue(encoder.encode(
-              `data: ${JSON.stringify({
-                type: 'agent_done',
-                agent_id: agent.id,
-                msg_id: msgId,
-                db_msg_id: insertedMsg?.id // 只返回数据库生成的真实ID
-              })}\n\n`
-            ));
+            try {
+              controller.enqueue(encoder.encode(
+                `data: ${JSON.stringify({
+                  type: 'agent_done',
+                  agent_id: agent.id,
+                  msg_id: msgId,
+                  db_msg_id: insertedMsg?.id // 只返回数据库生成的真实ID
+                })}\n\n`
+              ));
+            } catch (e) {
+              // 如果 controller 已关闭，静默处理
+            }
 
             return { agent, response: fullResponse };
           });
@@ -564,8 +624,12 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
             )
           );
 
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-          controller.close();
+          try {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          } catch (e) {
+            // 如果 controller 已关闭，静默处理
+          }
         } catch (error) {
           console.error('协调者处理失败:', error);
 
@@ -579,10 +643,14 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
             )
           );
 
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ error: '协调者处理失败' })}\n\n`)
-          );
-          controller.close();
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ error: '协调者处理失败' })}\n\n`)
+            );
+            controller.close();
+          } catch (e) {
+            // 如果 controller 已关闭，静默处理
+          }
         }
       }
     });

@@ -402,46 +402,6 @@ function renderMarkdown(text: string) {
     const line = lines[i];
     const index = i;
 
-    // 图片：支持单个 Image: [url] 或多个 Image: [url]Image: [url] 连在一起
-    const imageMatches = line.matchAll(/Image:\s*\[([^\]]+)\]/g);
-    const imageArray = Array.from(imageMatches);
-    
-    if (imageArray.length > 0) {
-      // 如果整行都是图片，渲染所有图片
-      if (imageArray.length === 1 && line.trim() === `Image: [${imageArray[0][1]}]`) {
-        const imageUrl = imageArray[0][1];
-        renderedElements.push(
-          <img
-            key={`image-${index}`}
-            src={imageUrl}
-            alt="Generated image"
-            className="my-2 max-w-full h-auto rounded-lg"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        );
-      } else {
-        // 多个图片连在一起的情况，分行显示
-        imageArray.forEach((match, matchIndex) => {
-          const imageUrl = match[1];
-          renderedElements.push(
-            <img
-              key={`image-${index}-${matchIndex}`}
-              src={imageUrl}
-              alt="Generated image"
-              className="my-2 max-w-full h-auto rounded-lg"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          );
-        });
-      }
-      i++;
-      continue;
-    }
-
     // 代码块
     if (line.startsWith('```')) {
       const codeBlock = extractCodeBlock(text, index);
