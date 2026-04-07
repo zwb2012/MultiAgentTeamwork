@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, ReactNode, useState, useEffect } from 'react';
-import { getConfigFromGlobal, MessageContentConfig } from '@/lib/message-content-config';
+import { getConfigFromGlobal, MessageContentConfig, DEFAULT_CONFIG } from '@/lib/message-content-config';
 
 const MessageConfigContext = createContext<MessageContentConfig | null>(null);
 
