@@ -193,4 +193,50 @@
   - `/skills/stats` - 技能统计页面：查看使用统计和执行日志
   - `/agents/[id]/skills` - 智能体技能配置：为智能体配置技能
 
+## 待处理问题
+
+### Tag001: Markdown渲染问题 - 实时输出正常但完成后格式错误
+
+**问题描述**：
+- **问题1：完成后格式错误**
+  - 表现：实时输出时格式正确，但任务完成后格式不正确
+  - 具体表现：多个 `Image: [url]` 连在一起，没有正确渲染为图片
+  - 示例：`Image: [url1]Image: [url2]Image: [url3]`
+  - 影响范围：多智能体对话、单智能体对话
+
+- **问题2：内容重复**
+  - 表现：完成后内容有重复
+  - 具体表现：`Image: [url]` 重复出现多次
+  - 示例：同一段内容中的 `Image: [url]` 出现了 4 次
+  - 用户提供的示例：
+    ```
+    Image: [https://code.coze.cn/api/sandbox/coze_coding/file/proxy?expire_time=-1&file_path=assets%2Fimage.png&nonce=3e7a4696-0459-459b-a95c-283a09d5b8eb&project_id=7623224889046089770&sign=37445efe7b21111a813dbe8e997558a3fe324f7f001d84e01203eeac30bc75b4]``Image: [https://code.coze.cn/api/sandbox/coze_coding/file/proxy?expire_time=-1&file_path=assets%2Fimage.png&nonce=a55d691c-4822-4732-9731-8717d273c3ac&project_id=7623224889046089770&sign=3234b348dbf060604c3b2c3c6d704147e90eef8ef0741e8441cc91dfcd3a506e]``Image: [https://code.coze.cn/api/sandbox/coze_coding/file/proxy?expire_time=-1&file_path=assets%2Fimage.png&nonce=8d05a20e-8250-4bcb-adbb-f20f1fbe0cb2&project_id=7623224889046089770&sign=54ab036b8cd2d3d1342429fbdd45b271543ae948839005237265b03457b5e358]``Image: [https://code.coze.cn/api/sandbox/coze_coding/file/proxy?expire_time=-1&file_path=assets%2Fimage.png&nonce=8e5d88b0-192d-4353-b49c-4668bc900354&project_id=7623224889046089770&sign=1ab22c05a9f4f99325e4750540289da9e4ffca930930f9e5b894d14bd71d9661]`
+    ```
+
+**可能原因**：
+1. 流式累积时没有正确处理换行或分隔符
+2. Markdown 渲染器在处理某些格式时有问题
+3. 完成后的状态更新逻辑有问题
+4. 数据库读取或缓存逻辑有问题
+
+**已完成的修复**：
+- ✅ 修复单智能体流式输出无法实时显示的问题（commit: 132d18c）
+
+**待调查**：
+- [ ] 验证流式累积逻辑是否正确处理换行
+- [ ] 检查 Markdown 渲染器的实现
+- [ ] 分析完成后的状态更新逻辑
+- [ ] 检查数据库存储和读取逻辑
+- [ ] 对比流式输出和完成后的内容差异
+
+**相关文件**：
+- `src/app/conversations/[id]/page.tsx` - 会话页面
+- `src/app/api/chat/route.ts` - 聊天 API
+- `src/components/chat/MessageContent.tsx` - 消息内容组件
+- `src/types/conversation.ts` - 会话类型定义
+
+**使用方法**：
+下次只需说 "Tag001" 即可快速定位到此问题。
+
+
 
