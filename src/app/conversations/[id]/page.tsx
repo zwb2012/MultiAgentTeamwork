@@ -138,17 +138,14 @@ export default function ConversationDetailPage() {
   // 监听滚动事件（当 loading 完成后绑定）
   useEffect(() => {
     if (isLoading) {
-      console.log('⏳ 正在加载，等待加载完成...');
       return;
     }
 
     // 等待下一帧，确保 DOM 已经渲染
     const timer = setTimeout(() => {
       const scrollContainer = scrollRef.current;
-      console.log('🔍 useEffect 执行（延迟），scrollContainer =', scrollContainer);
 
       if (!scrollContainer) {
-        console.log('❌ scrollContainer 不存在，无法绑定 scroll 事件');
         return;
       }
 
@@ -158,20 +155,8 @@ export default function ConversationDetailPage() {
         const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
         const atBottom = distanceFromBottom <= threshold;
 
-        console.log('📜 滚动事件:', {
-          scrollTop,
-          scrollHeight,
-          clientHeight,
-          distanceFromBottom,
-          atBottom,
-          isUserScrolledAway: isUserScrolledAway.current,
-          isSmoothScrolling: isSmoothScrolling.current,
-          timeSinceLastAutoScroll: Date.now() - lastAutoScrollTime.current
-        });
-
         // 如果正在平滑滚动，用户手动滚动时立即解锁
         if (isSmoothScrolling.current) {
-          console.log('🛑 用户在平滑滚动期间手动滚动，立即解锁');
           isSmoothScrolling.current = false;
           // 清理平滑滚动的监听器
           if (smoothScrollHandler.current) {
@@ -182,21 +167,17 @@ export default function ConversationDetailPage() {
 
         // 如果距离上次自动滚动不超过 500ms，认为是程序性滚动，忽略
         if (Date.now() - lastAutoScrollTime.current < 500) {
-          console.log('⏭️ 跳过滚动事件（程序性滚动）');
           return;
         }
 
         // 用户手动滚动：无论滚动到哪里，都设置为 true
         // 只有点击"有新消息"按钮才会恢复为 false
         isUserScrolledAway.current = true;
-        console.log('✅ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
       };
 
       scrollContainer.addEventListener('scroll', handleScroll);
-      console.log('🎧 已绑定 scroll 事件处理器');
       return () => {
         scrollContainer.removeEventListener('scroll', handleScroll);
-        console.log('🔌 已解绑 scroll 事件处理器');
       };
     }, 100); // 延迟 100ms 确保 DOM 已渲染
 
@@ -215,31 +196,18 @@ export default function ConversationDetailPage() {
 
   // 智能自动滚动：只有当用户在底部时才自动滚动
   useEffect(() => {
-    console.log('🔍 检查自动滚动:', {
-      isUserScrolledAway: isUserScrolledAway.current,
-      isSmoothScrolling: isSmoothScrolling.current,
-      willScroll: !isUserScrolledAway.current && !isSmoothScrolling.current,
-      messagesLength: messages.length,
-      hasStreaming: !!streamingMessage
-    });
-
     // 如果正在进行平滑滚动（用户点击"有新消息"），不执行自动滚动
     if (isSmoothScrolling.current) {
-      console.log('⏸️ 正在平滑滚动中，跳过自动滚动');
       return;
     }
 
     // 只有当用户在底部时，才自动滚动
     if (!isUserScrolledAway.current) {
-      console.log('⬇️ 执行自动滚动到底部');
-
       // 记录自动滚动时间戳
       lastAutoScrollTime.current = Date.now();
 
       // 使用 behavior: 'auto' 避免平滑滚动触发多次 scroll 事件
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-    } else {
-      console.log('⏸️ 不执行自动滚动，用户已滚离底部');
     }
   }, [messages, streamingMessage]);
   // 管理参与者相关状态
@@ -269,7 +237,6 @@ export default function ConversationDetailPage() {
         abortControllerRef.current.abort();
       } catch (e) {
         // 忽略重复关闭的错误
-        console.log('Controller already closed:', e);
       }
       abortControllerRef.current = null;
     }
@@ -309,8 +276,6 @@ export default function ConversationDetailPage() {
 
   // 滚动到底部
   const scrollToBottom = () => {
-    console.log('→ 用户点击"有新消息"，滚动到底部');
-
     // 设置锁定标志，禁用 useEffect 的自动滚动
     isSmoothScrolling.current = true;
     isUserScrolledAway.current = false; // 回到底部，恢复自动滚动
@@ -321,7 +286,6 @@ export default function ConversationDetailPage() {
     // 监听滚动事件，检测是否到达底部
     const scrollContainer = scrollRef.current;
     if (!scrollContainer) {
-      console.log('❌ scrollContainer 不存在，直接解锁');
       isSmoothScrolling.current = false;
       return;
     }
@@ -332,11 +296,8 @@ export default function ConversationDetailPage() {
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       const atBottom = distanceFromBottom <= threshold;
 
-      console.log('📜 平滑滚动中:', { distanceFromBottom: distanceFromBottom.toFixed(1), atBottom });
-
       if (atBottom) {
         // 到达底部，完成平滑滚动
-        console.log('✅ 到达底部，平滑滚动完成');
         lastAutoScrollTime.current = Date.now();
         isSmoothScrolling.current = false;
         scrollContainer.removeEventListener('scroll', handleSmoothScroll);
@@ -349,7 +310,6 @@ export default function ConversationDetailPage() {
 
     // 添加滚动事件监听
     scrollContainer.addEventListener('scroll', handleSmoothScroll);
-    console.log('🎧 已绑定平滑滚动监听器');
   };
 
   const fetchConversation = async () => {
@@ -400,7 +360,6 @@ export default function ConversationDetailPage() {
         // 消息加载完成后，自动滚动到最下面
         setTimeout(() => {
           if (scrollRef.current) {
-            console.log('✓ 消息加载完成，自动滚动到最下面');
             isUserScrolledAway.current = false; // 回到底部
 
             // 记录自动滚动时间戳
@@ -410,7 +369,7 @@ export default function ConversationDetailPage() {
         }, 100);
       }
     } catch (error) {
-      console.error('获取会话详情失败:', error);
+      // 静默处理错误，不输出日志
     } finally {
       setIsLoading(false);
     }
@@ -638,11 +597,9 @@ export default function ConversationDetailPage() {
     } catch (error) {
       // 如果是用户主动停止（AbortError），不显示错误提示和日志
       if (error instanceof Error && error.name === 'AbortError') {
-        console.log('用户停止了生成');
         // 不显示错误，保留已输出的内容
       } else {
         // 其他错误才显示提示和日志
-        console.error('发送消息失败:', error);
         alert(error instanceof Error ? error.message : '发送失败');
         // 移除失败的用户消息
         setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
@@ -668,7 +625,7 @@ export default function ConversationDetailPage() {
         setAllAgents(result.data || []);
       }
     } catch (error) {
-      console.error('获取智能体列表失败:', error);
+      // 静默处理错误，不输出日志
     } finally {
       setLoadingAgents(false);
     }
@@ -712,7 +669,6 @@ export default function ConversationDetailPage() {
         alert(result.error || '添加失败');
       }
     } catch (error) {
-      console.error('添加参与者失败:', error);
       alert('添加失败');
     } finally {
       setManagingParticipants(false);
@@ -735,7 +691,6 @@ export default function ConversationDetailPage() {
         alert(result.error || '移除失败');
       }
     } catch (error) {
-      console.error('移除参与者失败:', error);
       alert('移除失败');
     }
   };
