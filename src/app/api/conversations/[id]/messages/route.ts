@@ -15,8 +15,7 @@ export async function GET(
       .from('messages')
       .select('*')
       .eq('conversation_id', id)
-      .order('created_at', { ascending: true })
-      .limit(100);
+      .order('created_at', { ascending: true });
     
     if (error) {
       throw new Error(`获取消息失败: ${error.message}`);
