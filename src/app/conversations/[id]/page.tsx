@@ -186,8 +186,9 @@ export default function ConversationDetailPage() {
           return;
         }
 
-        // 微信/企微逻辑：不在底部就是 true，在底部就是 false
-        isUserScrolledAway.current = !atBottom;
+        // 用户手动滚动：无论滚动到哪里，都设置为 true
+        // 只有点击"有新消息"按钮才会恢复为 false
+        isUserScrolledAway.current = true;
         console.log('✅ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
       };
 
