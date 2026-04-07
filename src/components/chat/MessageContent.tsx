@@ -144,12 +144,12 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
     // 章节折叠模式
     return (
-      <div className="message-content space-y-3">
-        {/* 整体操作按钮 */}
-        <div className="flex items-center justify-between border rounded-md p-2 bg-background">
+      <div className="message-content">
+        {/* 上半部分：工具栏 */}
+        <div className="flex items-center justify-between border border-b-0 rounded-t-md p-2 bg-muted">
           <div className="flex gap-1.5">
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="h-8 text-xs"
               onClick={() => toggleAllSections(true)}
@@ -158,7 +158,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
               全部展开
             </Button>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="h-8 text-xs"
               onClick={() => toggleAllSections(false)}
@@ -167,7 +167,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
               全部收起
             </Button>
             <Button
-              variant="outline"
+              variant="secondary"
               size="sm"
               className="h-8 text-xs"
               onClick={() => setIsCollapsed(true)}
@@ -190,15 +190,18 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
           </Button>
         </div>
 
-        {/* 渲染各章节 */}
-        {sections.map(section => (
-          <SectionItem
-            key={section.id}
-            section={section}
-            isExpanded={expandedSections.has(section.id)}
-            onToggle={() => toggleSection(section.id)}
-          />
-        ))}
+        {/* 下半部分：对话内容 */}
+        <div className="border rounded-b-md p-3 bg-background">
+          {/* 渲染各章节 */}
+          {sections.map(section => (
+            <SectionItem
+              key={section.id}
+              section={section}
+              isExpanded={expandedSections.has(section.id)}
+              onToggle={() => toggleSection(section.id)}
+            />
+          ))}
+        </div>
       </div>
     );
   }
