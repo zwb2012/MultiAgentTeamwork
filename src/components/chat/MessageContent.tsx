@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ChevronDown, ChevronUp, Copy, Check, Code, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -57,6 +57,19 @@ export function MessageContent({ content, maxLength, isStreaming = false }: Mess
     if (sections.length <= count) return new Set(sections.map(s => s.id));
     return new Set(sections.slice(0, count).map(s => s.id));
   });
+
+  // 当流式输出结束时，延迟更新折叠状态，避免立即切换导致格式混乱
+  useEffect(() => {
+    if (!isStreaming && sections.length > 1) {
+      const timer = setTimeout(() => {
+        // 流式输出结束后，应用默认的折叠状态
+        const count = finalConfig.defaultExpandedSections;
+        setExpandedSections(new Set(sections.slice(0, count).map(s => s.id)));
+      }, 500); // 500ms 延迟
+
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, sections.length, finalConfig.defaultExpandedSections]);
 
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {

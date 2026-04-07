@@ -514,7 +514,7 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
             );
 
             // 保存完整消息到数据库
-            await client
+            const { data: insertedMsg, error: insertError } = await client
               .from('messages')
               .insert({
                 conversation_id,
@@ -527,14 +527,21 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                   project_id: agent.project_id,
                   role: agent.role
                 }
-              });
+              })
+              .select()
+              .single();
 
-            // 发送完成标记
+            if (insertError) {
+              console.error('保存消息到数据库失败:', insertError);
+            }
+
+            // 发送完成标记（包含数据库生成的真实消息ID）
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 type: 'agent_done',
                 agent_id: agent.id,
-                msg_id: msgId
+                msg_id: msgId,
+                db_msg_id: insertedMsg?.id // 数据库生成的真实ID
               })}\n\n`
             ));
 

@@ -223,13 +223,19 @@ export default function ConversationDetailPage() {
                     )
                   );
                 } else if (parsed.type === 'agent_done') {
-                  // 标记消息完成
+                  // 标记消息完成，并用数据库生成的真实ID替换临时ID
                   setMessages(prev =>
-                    prev.map(msg =>
-                      msg.id === parsed.msg_id
-                        ? { ...msg, streaming: false, done: true }
-                        : msg
-                    )
+                    prev.map(msg => {
+                      if (msg.id === parsed.msg_id) {
+                        const updatedMsg = { ...msg, streaming: false, done: true };
+                        // 如果后端返回了数据库生成的真实ID，则替换临时ID
+                        if (parsed.db_msg_id) {
+                          updatedMsg.id = parsed.db_msg_id;
+                        }
+                        return updatedMsg;
+                      }
+                      return msg;
+                    })
                   );
                 }
 
