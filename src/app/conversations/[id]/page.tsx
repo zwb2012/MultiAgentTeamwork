@@ -132,6 +132,7 @@ export default function ConversationDetailPage() {
   // 智能滚动控制（使用 useRef 避免不必要的重渲染）
   const shouldAutoScrollRef = useRef(true);
   const isUserScrolledRef = useRef(false);
+  const isProgrammaticScrollRef = useRef(false);
   const lastScrollTopRef = useRef(0);
 
   // 监听滚动事件
@@ -151,21 +152,30 @@ export default function ConversationDetailPage() {
         clientHeight,
         distanceFromBottom,
         atBottom,
+        isProgrammatic: isProgrammaticScrollRef.current,
         lastScrollTop: lastScrollTopRef.current
       });
 
       // 记录上次的滚动位置
       lastScrollTopRef.current = scrollTop;
 
+      // 如果是程序性滚动，不修改 isUserScrolledRef 状态
+      if (isProgrammaticScrollRef.current) {
+        isProgrammaticScrollRef.current = false;
+        console.log('→ 程序性滚动，保持用户滚动状态');
+        return;
+      }
+
+      // 只有用户手动滚动时才修改状态
       if (atBottom) {
         // 用户滚动到底部，恢复自动滚动
         shouldAutoScrollRef.current = true;
         isUserScrolledRef.current = false;
-        console.log('✓ 用户滚动到底部，恢复自动滚动');
+        console.log('✓ 用户手动滚动到底部，恢复自动滚动');
       } else {
         // 用户滚动到非底部位置，完全停止自动滚动
         isUserScrolledRef.current = true;
-        console.log('✗ 用户滚动到非底部位置，停止自动滚动');
+        console.log('✗ 用户手动滚动到非底部位置，停止自动滚动');
       }
     };
 
@@ -180,7 +190,7 @@ export default function ConversationDetailPage() {
     console.log('检查自动滚动:', {
       shouldAutoScroll: shouldAutoScrollRef.current,
       isUserScrolled: isUserScrolledRef.current,
-      willScroll: shouldAutoScrollRef.current && !isUserScrolledRef.current,
+      willScroll: !isUserScrolledRef.current,
       messagesLength: messages.length,
       hasStreaming: !!streamingMessage
     });
@@ -188,6 +198,7 @@ export default function ConversationDetailPage() {
     // 只有当用户没有手动滚动时，才自动滚动
     if (!isUserScrolledRef.current) {
       console.log('⬇️ 执行自动滚动到底部');
+      isProgrammaticScrollRef.current = true; // 标记为程序性滚动
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     } else {
       console.log('⏹️ 不执行自动滚动，用户已手动滚动');
@@ -310,29 +321,24 @@ export default function ConversationDetailPage() {
         }));
         setMessages(messagesWithParallelMode);
 
-        // 消息加载完成后，检查滚动状态
+        // 消息加载完成后，自动滚动到最下面并重置滚动状态
         setTimeout(() => {
           if (scrollRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-            const threshold = 20; // 底部20px内算作底部
             const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-            const atBottom = distanceFromBottom <= threshold;
 
             console.log('消息加载完成后的滚动状态:', {
               scrollTop,
               scrollHeight,
               clientHeight,
-              distanceFromBottom,
-              atBottom
+              distanceFromBottom
             });
 
-            // 如果用户不在底部附近，标记为已手动滚动
-            if (!atBottom) {
-              isUserScrolledRef.current = true;
-              console.log('✗ 消息加载完成，用户不在底部，停止自动滚动');
-            } else {
-              console.log('✓ 消息加载完成，用户在底部，恢复自动滚动');
-            }
+            // 自动滚动到最下面
+            isProgrammaticScrollRef.current = true;
+            isUserScrolledRef.current = false;
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            console.log('✓ 消息加载完成，自动滚动到最下面');
           }
         }, 100);
       }
