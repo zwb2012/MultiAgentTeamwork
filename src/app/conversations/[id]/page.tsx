@@ -133,7 +133,7 @@ export default function ConversationDetailPage() {
   const isUserScrolledAway = useRef(false); // 用户是否滚离底部
   const lastAutoScrollTime = useRef(0); // 记录上次自动滚动的时间戳
   const isSmoothScrolling = useRef(false); // 是否正在进行平滑滚动
-  const smoothScrollCompleteHandler = useRef<(() => void) | null>(null); // 平滑滚动完成回调
+  const smoothScrollHandler = useRef<((e: Event) => void) | null>(null); // 平滑滚动监听器
 
   // 监听滚动事件（当 loading 完成后绑定）
   useEffect(() => {
@@ -174,9 +174,9 @@ export default function ConversationDetailPage() {
           console.log('🛑 用户在平滑滚动期间手动滚动，立即解锁');
           isSmoothScrolling.current = false;
           // 清理平滑滚动的监听器
-          if (smoothScrollCompleteHandler.current) {
-            smoothScrollCompleteHandler.current();
-            smoothScrollCompleteHandler.current = null;
+          if (smoothScrollHandler.current) {
+            scrollContainer.removeEventListener('scroll', smoothScrollHandler.current);
+            smoothScrollHandler.current = null;
           }
         }
 
@@ -201,6 +201,16 @@ export default function ConversationDetailPage() {
 
     return () => clearTimeout(timer);
   }, [isLoading]);
+
+  // 组件卸载时清理平滑滚动监听器
+  useEffect(() => {
+    return () => {
+      if (smoothScrollHandler.current && scrollRef.current) {
+        scrollRef.current.removeEventListener('scroll', smoothScrollHandler.current);
+        smoothScrollHandler.current = null;
+      }
+    };
+  }, []);
 
   // 智能自动滚动：只有当用户在底部时才自动滚动
   useEffect(() => {
@@ -307,7 +317,7 @@ export default function ConversationDetailPage() {
     // 执行平滑滚动
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-    // 监听滚动事件，检测是否到达底部或用户手动滚动
+    // 监听滚动事件，检测是否到达底部
     const scrollContainer = scrollRef.current;
     if (!scrollContainer) {
       console.log('❌ scrollContainer 不存在，直接解锁');
@@ -330,26 +340,15 @@ export default function ConversationDetailPage() {
         isSmoothScrolling.current = false;
         scrollContainer.removeEventListener('scroll', handleSmoothScroll);
       }
-      // 如果不在底部，继续监听滚动事件
+      // 如果不在底部，继续监听滚动事件（用户可能在向上滚动）
     };
+
+    // 保存监听器引用，以便清理
+    smoothScrollHandler.current = handleSmoothScroll;
 
     // 添加滚动事件监听
     scrollContainer.addEventListener('scroll', handleSmoothScroll);
     console.log('🎧 已绑定平滑滚动监听器');
-
-    // 设置超时，防止滚动事件永远不触发
-    const timeoutId = setTimeout(() => {
-      console.log('⏰ 平滑滚动超时（5s），强制解锁');
-      isSmoothScrolling.current = false;
-      lastAutoScrollTime.current = Date.now();
-      scrollContainer.removeEventListener('scroll', handleSmoothScroll);
-    }, 5000);
-
-    // 保存超时ID，以便清理
-    smoothScrollCompleteHandler.current = () => {
-      clearTimeout(timeoutId);
-      scrollContainer.removeEventListener('scroll', handleSmoothScroll);
-    };
   };
 
   const fetchConversation = async () => {
