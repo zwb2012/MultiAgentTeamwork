@@ -120,6 +120,7 @@ export default function ConversationDetailPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [aiResponding, setAiResponding] = useState(false);
+  const [isManuallyStopped, setIsManuallyStopped] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [respondingAgent, setRespondingAgent] = useState<Agent | null>(null);
   // 多智能体流式输出跟踪
@@ -129,18 +130,21 @@ export default function ConversationDetailPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 智能滚动控制
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
-  // 检测是否在底部附近
+  // 检测是否在底部附近（阈值10px）
   const checkIfAtBottom = useCallback(() => {
     if (!scrollRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const threshold = 100; // 底部100px内算作在底部
+    const threshold = 10; // 底部10px内算作在底部
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     const atBottom = distanceFromBottom <= threshold;
-    setIsAtBottom(atBottom);
+
+    // 如果用户滚动到底部，恢复自动滚动
+    if (atBottom) {
+      setShouldAutoScroll(true);
+    }
+
     return atBottom;
   }, []);
 
@@ -150,41 +154,26 @@ export default function ConversationDetailPage() {
     if (!scrollContainer) return;
 
     const handleScroll = () => {
-      // 清除之前的 timeout
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-
       // 检测是否在底部
       const atBottom = checkIfAtBottom();
       if (!atBottom) {
-        // 用户滚动到了非底部位置，标记为用户正在滚动
-        setIsUserScrolling(true);
+        // 用户滚动到了非底部位置，完全停止自动滚动
+        setShouldAutoScroll(false);
       }
-
-      // 1秒后如果还在底部，恢复自动滚动
-      scrollTimeoutRef.current = setTimeout(() => {
-        if (checkIfAtBottom()) {
-          setIsUserScrolling(false);
-        }
-      }, 1000);
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
     };
   }, [checkIfAtBottom]);
 
-  // 智能自动滚动：只有在用户没有手动滚动且在底部附近时才自动滚动
+  // 智能自动滚动：只有当 shouldAutoScroll 为 true 时才自动滚动
   useEffect(() => {
-    if (!isUserScrolling && isAtBottom) {
+    if (shouldAutoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, streamingMessage, isUserScrolling, isAtBottom]);
+  }, [messages, streamingMessage, shouldAutoScroll]);
   // 管理参与者相关状态
   const [showManageDialog, setShowManageDialog] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
@@ -205,13 +194,44 @@ export default function ConversationDetailPage() {
   }, [conversationId]);
 
   // 停止生成
+  // 停止生成
   const handleStopGeneration = () => {
+    // 标记为用户主动停止
+    setIsManuallyStopped(true);
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
+
+    // 如果有流式输出的临时内容，保存到消息列表中
+    if (streamingMessage) {
+      if (currentStreamMessageId) {
+        // 多智能体模式：内容已经在 messages 中了，只需要更新状态
+        setStreamingMessage('');
+      } else if (respondingAgent) {
+        // 单智能体模式：创建消息对象保存内容
+        const aiMsg: Message = {
+          id: `ai-${Date.now()}-${Math.random()}`,
+          conversation_id: conversationId,
+          agent_id: respondingAgent.id,
+          role: 'assistant',
+          content: streamingMessage,
+          created_at: new Date().toISOString(),
+          message_type: 'text',
+          metadata: {
+            agent_name: respondingAgent.name,
+            role: respondingAgent.role,
+            project_id: respondingAgent.project_id
+          }
+        };
+        setMessages(prev => [...prev, aiMsg]);
+        setStreamingMessage('');
+      }
+    }
+
+    // 清除状态，但保留已回复的消息
     setAiResponding(false);
-    setStreamingMessage('');
     setCurrentStreamMessageId(null);
     setCurrentStreamMessageType(null);
     setRespondingAgent(null);
@@ -271,11 +291,14 @@ export default function ConversationDetailPage() {
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || sending || aiResponding) return;
-    
+
     const userMessage = inputMessage.trim();
     setInputMessage('');
     setSending(true);
-    
+
+    // 重置手动停止标志
+    setIsManuallyStopped(false);
+
     try {
       // 先添加用户消息到界面
       const userMsg: Message = {
@@ -494,6 +517,7 @@ export default function ConversationDetailPage() {
       // 如果是用户主动停止，不显示错误
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('用户停止了生成');
+        // 已经在 handleStopGeneration 中处理了，这里不需要额外操作
       } else {
         alert(error instanceof Error ? error.message : '发送失败');
         // 移除失败的用户消息
@@ -501,12 +525,22 @@ export default function ConversationDetailPage() {
       }
     } finally {
       setSending(false);
-      setAiResponding(false);
-      setStreamingMessage('');
-      setRespondingAgent(null);
+
+      // 清除状态
       setCurrentStreamMessageId(null);
       setCurrentStreamMessageType(null);
+      setRespondingAgent(null);
       abortControllerRef.current = null;
+
+      // 如果不是用户主动停止，才清空 streamingMessage 和设置 aiResponding
+      if (!isManuallyStopped) {
+        setAiResponding(false);
+        setStreamingMessage('');
+      } else {
+        // 用户主动停止，保留流式消息并重置标志
+        setAiResponding(false);
+        setIsManuallyStopped(false);
+      }
     }
   };
 
