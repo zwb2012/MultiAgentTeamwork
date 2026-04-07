@@ -22,6 +22,11 @@ interface Section {
 }
 
 export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false }: MessageContentProps) {
+  // 调试日志
+  if (parallelMode) {
+    console.log('[MessageContent] parallelMode=true, content length:', content.length, 'isStreaming:', isStreaming);
+  }
+
   // 从全局配置获取消息折叠配置
   const finalConfig = useMessageConfig();
 
@@ -37,10 +42,10 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  // 并行模式下使用更宽松的折叠策略（更容易触发折叠）
+  // 并行模式下强制触发最小化折叠（不管内容长短）
   let shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
-  if (parallelMode && !isStreaming && content.length > 50) {
-    // 并行模式下，内容超过50字符就触发折叠
+  if (parallelMode && !isStreaming) {
+    // 并行模式下，所有消息都默认折叠
     shouldAutoMinimizeFlag = true;
   }
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
@@ -70,8 +75,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
       const timer = setTimeout(() => {
         // 流式输出结束后，应用默认的折叠状态
         let minimizeFlag = shouldAutoMinimize(content, false, finalConfig);
-        // 并行模式下使用更宽松的折叠策略
-        if (parallelMode && content.length > 50) {
+        // 并行模式下，所有消息都默认折叠
+        if (parallelMode) {
           minimizeFlag = true;
         }
         setIsCollapsed(minimizeFlag);

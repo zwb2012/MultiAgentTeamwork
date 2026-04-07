@@ -262,6 +262,7 @@ export default function ConversationDetailPage() {
                 // 处理新的并行流式消息类型（优先处理）
                 if (parsed.type === 'agent_start') {
                   // 创建新的消息卡片
+                  console.log('[agent_start] parallel_mode:', parsed.parallel_mode);
                   const newMsg: Message = {
                     id: parsed.msg_id,
                     conversation_id: conversationId,
@@ -790,6 +791,7 @@ export default function ConversationDetailPage() {
 
                       {/* 消息气泡：只包含对话内容 */}
                       <div className={`message-bubble ${isUser ? 'user' : 'agent'}`}>
+                        {console.log('[Render MessageContent] msg_id:', msg.id, 'parallelMode:', msg.metadata?.parallel_mode === true)}
                         <MessageContent
                           content={msg.content}
                           isStreaming={msg.streaming || false}
