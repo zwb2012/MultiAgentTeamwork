@@ -144,7 +144,7 @@ export default function ConversationDetailPage() {
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       const atBottom = distanceFromBottom <= threshold;
 
-      console.log('滚动事件:', {
+      console.log('📜 滚动事件:', {
         scrollTop,
         scrollHeight,
         clientHeight,
@@ -154,18 +154,19 @@ export default function ConversationDetailPage() {
         timeSinceLastAutoScroll: Date.now() - lastAutoScrollTime.current
       });
 
-      // 如果距离上次自动滚动不超过 100ms，认为是程序性滚动，忽略
-      if (Date.now() - lastAutoScrollTime.current < 100) {
-        console.log('→ 跳过滚动事件（程序性滚动）');
+      // 如果距离上次自动滚动不超过 500ms，认为是程序性滚动，忽略
+      if (Date.now() - lastAutoScrollTime.current < 500) {
+        console.log('⏭️ 跳过滚动事件（程序性滚动）');
         return;
       }
 
       // 微信/企微逻辑：不在底部就是 true，在底部就是 false
       isUserScrolledAway.current = !atBottom;
-      console.log('→ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
+      console.log('✅ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
+    console.log('🎧 已绑定 scroll 事件处理器');
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
@@ -173,7 +174,7 @@ export default function ConversationDetailPage() {
 
   // 智能自动滚动：只有当用户在底部时才自动滚动
   useEffect(() => {
-    console.log('检查自动滚动:', {
+    console.log('🔍 检查自动滚动:', {
       isUserScrolledAway: isUserScrolledAway.current,
       willScroll: !isUserScrolledAway.current,
       messagesLength: messages.length,
@@ -190,7 +191,7 @@ export default function ConversationDetailPage() {
       // 使用 behavior: 'auto' 避免平滑滚动触发多次 scroll 事件
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
     } else {
-      console.log('⏹️ 不执行自动滚动，用户已滚离底部');
+      console.log('⏸️ 不执行自动滚动，用户已滚离底部');
     }
   }, [messages, streamingMessage]);
   // 管理参与者相关状态
