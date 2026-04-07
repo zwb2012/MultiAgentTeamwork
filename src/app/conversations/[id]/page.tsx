@@ -41,6 +41,72 @@ import type { Conversation, Message } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
 import { MessageContent } from '@/components/chat/MessageContent';
 
+// 自定义样式
+const messageStyles = `
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .agent-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .agent-meta {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    font-weight: 500;
+  }
+
+  .timestamp {
+    font-size: 12px;
+    color: #999999;
+    margin-left: auto;
+  }
+
+  .message-content-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    max-width: 70%;
+  }
+
+  .message-bubble {
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    position: relative;
+    max-width: 100%;
+  }
+
+  .message-bubble.agent {
+    background: #ffffff;
+    border: 1px solid #e8e8e8;
+    border-top-left-radius: 4px;
+    color: #262626;
+  }
+
+  .message-bubble.user {
+    background: #1890ff;
+    color: #ffffff;
+    border-top-right-radius: 4px;
+  }
+`;
+
 export default function ConversationDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -679,66 +745,78 @@ export default function ConversationDetailPage() {
                   : (agentInfo?.name || '未知智能体');
 
                 const isUser = msg.role === 'user';
-                
+
                 return (
-                  <div 
+                  <div
                     key={msg.id || index}
                     className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
                   >
                     {!isUser && (
-                      <Avatar className="h-8 w-8 mt-1">
-                        <AvatarFallback className="bg-primary/10">
-                          <Bot className="h-4 w-4" />
+                      <Avatar className="h-10 w-10 mt-1 flex-shrink-0">
+                        <AvatarFallback className="bg-blue-50">
+                          <Bot className="h-5 w-5 text-blue-500" />
                         </AvatarFallback>
                       </Avatar>
                     )}
-                    <div className={`max-w-[70%] ${isUser ? 'bg-primary text-primary-foreground' : 'bg-muted'} rounded-lg p-3 relative group`}>
+                    <div className={`message-content-wrapper ${isUser ? 'items-end' : 'items-start'}`}>
+                      {/* 智能体消息：信息行独立显示 */}
                       {!isUser && (
-                        <div className="text-xs font-medium mb-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-muted-foreground">{displayName}</span>
+                        <div className="agent-header">
+                          <span className="agent-name">{displayName}</span>
+                          <div className="agent-meta">
                             {isCoordinator && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                              <Badge variant="outline" className="badge">
                                 协调者
                               </Badge>
                             )}
                             {!isCoordinator && agentInfo && (
                               <>
+                                <Badge variant="outline" className="badge">
+                                  {getRoleLabel(agentInfo.role)}
+                                </Badge>
                                 {agentInfo.project_id ? (
-                                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                                  <Badge variant="secondary" className="badge">
                                     {projects.find(p => p.id === agentInfo.project_id)?.name || '未知项目'}
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                  <Badge variant="outline" className="badge">
                                     全局
                                   </Badge>
                                 )}
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                                  {getRoleLabel(agentInfo.role)}
-                                </Badge>
                               </>
                             )}
                           </div>
+                          <span className="timestamp">
+                            {msg.created_at && new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
                       )}
-                      <MessageContent 
-                        content={msg.content} 
-                        isStreaming={msg.streaming || false} 
-                        parallelMode={msg.metadata?.parallel_mode === true}
-                      />
-                      {/* 流式状态指示器 */}
-                      {msg.streaming && (
-                        <div className="flex items-center gap-2 text-xs mt-2">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                          <span className={isUser ? 'text-primary-foreground/70' : 'text-gray-500'}>正在思考...</span>
-                        </div>
-                      )}
-                      <div className={`text-xs mt-1 ${isUser ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                        {msg.created_at && new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+
+                      {/* 消息气泡：只包含对话内容 */}
+                      <div className={`message-bubble ${isUser ? 'user' : 'agent'}`}>
+                        <MessageContent
+                          content={msg.content}
+                          isStreaming={msg.streaming || false}
+                          parallelMode={msg.metadata?.parallel_mode === true}
+                        />
+                        {/* 流式状态指示器 */}
+                        {msg.streaming && !isUser && (
+                          <div className="flex items-center gap-2 text-xs mt-2">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                            <span className="text-gray-500">正在思考...</span>
+                          </div>
+                        )}
                       </div>
+
+                      {/* 用户消息：时间戳在左侧 */}
+                      {isUser && (
+                        <span className="timestamp">
+                          {msg.created_at && new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
                     {isUser && (
-                      <Avatar className="h-8 w-8 mt-1">
+                      <Avatar className="h-10 w-10 mt-1 flex-shrink-0">
                         <AvatarFallback>U</AvatarFallback>
                       </Avatar>
                     )}
@@ -886,6 +964,9 @@ export default function ConversationDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 自定义样式 */}
+      <style jsx>{messageStyles}</style>
     </div>
   );
 }
