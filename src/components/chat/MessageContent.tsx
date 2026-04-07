@@ -146,19 +146,9 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     // 章节折叠模式
     return (
       <div className="message-content space-y-2">
-        {/* 渲染各章节 */}
-        {sections.map(section => (
-          <SectionItem
-            key={section.id}
-            section={section}
-            isExpanded={expandedSections.has(section.id)}
-            onToggle={() => toggleSection(section.id)}
-          />
-        ))}
-
         {/* 工具按钮 */}
         {!isStreaming && (
-          <div className="flex items-center justify-end gap-2 pt-2 border-t">
+          <div className="flex items-center justify-start gap-2 pb-2 border-b">
             <Button
               variant="ghost"
               size="sm"
@@ -200,6 +190,16 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
             </Button>
           </div>
         )}
+
+        {/* 渲染各章节 */}
+        {sections.map(section => (
+          <SectionItem
+            key={section.id}
+            section={section}
+            isExpanded={expandedSections.has(section.id)}
+            onToggle={() => toggleSection(section.id)}
+          />
+        ))}
       </div>
     );
   }
