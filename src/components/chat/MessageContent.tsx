@@ -414,8 +414,41 @@ function renderMarkdown(text: string) {
       }
     }
 
-    // 内联代码
-    if (line.includes('`') && !line.startsWith('```')) {
+    // Image: [url] 格式（渲染为 markdown 图片）
+    const imageMatch = line.match(/^Image:\s*\[(.+?)\]$/);
+    if (imageMatch) {
+      renderedElements.push(
+        <img
+          key={`image-${index}`}
+          src={imageMatch[1]}
+          alt={imageMatch[1]}
+          className="max-w-full h-auto my-2 rounded"
+        />
+      );
+      i++;
+      continue;
+    }
+
+    // Markdown 标准图片格式 ![alt](url)
+    const mdImageMatch = line.match(/^!\[([^\]]*)\]\((.+?)\)$/);
+    if (mdImageMatch) {
+      renderedElements.push(
+        <img
+          key={`md-image-${index}`}
+          src={mdImageMatch[2]}
+          alt={mdImageMatch[1]}
+          className="max-w-full h-auto my-2 rounded"
+        />
+      );
+      i++;
+      continue;
+    }
+
+    // 内联代码：更精确的判断，只有当行包含 `code` 格式时才处理
+    // 避免将 `Image: [url]` 这类包含反引号但不是内联代码的行误判
+    const inlineCodeMatches = line.matchAll(/`([^`]+)`/g);
+    const inlineCodeArray = Array.from(inlineCodeMatches);
+    if (inlineCodeArray.length > 0 && !line.startsWith('```')) {
       renderedElements.push(<div key={`inline-${index}`}>{renderInlineCode(line)}</div>);
       i++;
       continue;
