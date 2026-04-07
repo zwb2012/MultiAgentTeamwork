@@ -18,13 +18,13 @@ export function MessageConfigProvider({ children }: { children: ReactNode }) {
         const response = await fetch('/api/config');
         const result = await response.json();
         if (result.success && result.data.ui?.message) {
-          setConfig(getConfigFromGlobal(result.data.ui));
+          setConfig(result.data.ui.message);
         } else {
-          setConfig(getConfigFromGlobal({ message: { collapseMode: 'default' } }));
+          setConfig(DEFAULT_CONFIG);
         }
       } catch (error) {
         console.error('获取UI配置失败:', error);
-        setConfig(getConfigFromGlobal({ message: { collapseMode: 'default' } }));
+        setConfig(DEFAULT_CONFIG);
       }
     };
     fetchConfig();
@@ -45,7 +45,7 @@ export function useMessageConfig(): MessageContentConfig {
   const config = useContext(MessageConfigContext);
   if (!config) {
     // 返回默认配置（首屏渲染时可能还未加载配置）
-    return getConfigFromGlobal({ message: { collapseMode: 'default' } });
+    return DEFAULT_CONFIG;
   }
   return config;
 }

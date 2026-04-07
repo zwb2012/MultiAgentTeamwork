@@ -36,12 +36,28 @@ export interface GlobalConfig {
   // UI 显示配置
   ui: {
     message: {
-      collapseMode: 'default' | 'compact' | 'loose' | 'custom';
-      customThresholds?: {
-        autoMinimize: { charCount: number; lineCount: number };
-        autoSectionFold: { charCount: number; lineCount: number };
-        autoTruncate: { charCount: number; lineCount: number };
+      // 自动折叠阈值
+      autoMinimize: {
+        charCount: number;      // 字符数阈值
+        lineCount: number;       // 行数阈值
       };
+      autoSectionFold: {
+        charCount: number;      // 字符数阈值
+        lineCount: number;       // 行数阈值
+      };
+      autoTruncate: {
+        charCount: number;      // 字符数阈值
+        lineCount: number;       // 行数阈值
+      };
+
+      // 折叠显示长度
+      collapsedPreviewLength: number;  // 最小化时显示的预览长度
+      defaultMaxLength: number;        // 普通消息截断长度
+      codeBlockMaxLength: number;      // 包含代码块时的截断长度
+      aggressiveTruncateLength: number; // 激进模式截断长度
+
+      // 章节折叠默认展开数量
+      defaultExpandedSections: number;      // 正常模式下默认展开的章节数
     };
   };
 
@@ -69,7 +85,17 @@ const DEFAULT_CONFIG: GlobalConfig = {
   // UI 显示配置
   ui: {
     message: {
-      collapseMode: 'default'
+      // 自动折叠阈值
+      autoMinimize: { charCount: 500, lineCount: 15 },
+      autoSectionFold: { charCount: 200, lineCount: 8 },
+      autoTruncate: { charCount: 80, lineCount: 3 },
+      // 折叠显示长度
+      collapsedPreviewLength: 60,
+      defaultMaxLength: 80,
+      codeBlockMaxLength: 300,
+      aggressiveTruncateLength: 150,
+      // 章节折叠默认展开数量
+      defaultExpandedSections: 3
     }
   }
 };
