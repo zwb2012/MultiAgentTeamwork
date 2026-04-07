@@ -828,6 +828,49 @@ export default function ConversationDetailPage() {
                 );
               })}
 
+              {/* 渲染流式输出的临时消息（单智能体模式） */}
+              {streamingMessage && !currentStreamMessageId && respondingAgent && (
+                <div className="flex gap-3 justify-start">
+                  <Avatar className="h-10 w-10 mt-1 flex-shrink-0">
+                    <AvatarFallback className="bg-primary/10">
+                      <Bot className="h-5 w-5" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0 max-w-[70%]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-semibold text-foreground">
+                        {respondingAgent.name}
+                      </span>
+                      {respondingAgent.role && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 rounded text-primary">
+                          {getRoleLabel(respondingAgent.role)}
+                        </span>
+                      )}
+                      {respondingAgent.project_id ? (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-secondary/60 rounded">
+                          {projects.find(p => p.id === respondingAgent.project_id)?.name || '未知项目'}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-secondary/60 rounded">
+                          全局
+                        </span>
+                      )}
+                    </div>
+                    <div className="message-bubble agent">
+                      <MessageContent
+                        content={streamingMessage}
+                        isStreaming={true}
+                        parallelMode={false}
+                      />
+                      <div className="flex items-center gap-2 text-xs mt-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                        <span className="text-gray-500">正在思考...</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}
