@@ -37,8 +37,12 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  // 并行模式和普通模式使用相同的折叠逻辑，根据内容特征自动判断
-  const shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
+  // 并行模式下使用更宽松的折叠策略（更容易触发折叠）
+  let shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
+  if (parallelMode && !isStreaming && content.length > 50) {
+    // 并行模式下，内容超过50字符就触发折叠
+    shouldAutoMinimizeFlag = true;
+  }
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
   const shouldAutoTruncateFlag = shouldAutoTruncate(content, isStreaming, finalConfig);
 
@@ -60,18 +64,28 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     return new Set(sections.slice(0, count).map(s => s.id));
   });
 
-  // 当流式输出结束时，延迟更新折叠状态，避免立即切换导致格式混乱
+  // 当流式输出结束后，延迟更新折叠状态，避免立即切换导致格式混乱
   useEffect(() => {
-    if (!isStreaming && sections.length > 1) {
+    if (!isStreaming) {
       const timer = setTimeout(() => {
         // 流式输出结束后，应用默认的折叠状态
-        const count = finalConfig.defaultExpandedSections;
-        setExpandedSections(new Set(sections.slice(0, count).map(s => s.id)));
+        let minimizeFlag = shouldAutoMinimize(content, false, finalConfig);
+        // 并行模式下使用更宽松的折叠策略
+        if (parallelMode && content.length > 50) {
+          minimizeFlag = true;
+        }
+        setIsCollapsed(minimizeFlag);
+
+        // 如果有多个章节，也更新章节展开状态
+        if (sections.length > 1) {
+          const count = finalConfig.defaultExpandedSections;
+          setExpandedSections(new Set(sections.slice(0, count).map(s => s.id)));
+        }
       }, 500); // 500ms 延迟
 
       return () => clearTimeout(timer);
     }
-  }, [isStreaming, sections.length, finalConfig.defaultExpandedSections]);
+  }, [isStreaming, content, sections.length, finalConfig.defaultExpandedSections, finalConfig, parallelMode]);
 
   const toggleSection = (id: string) => {
     setExpandedSections(prev => {
