@@ -535,13 +535,14 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
               console.error('保存消息到数据库失败:', insertError);
             }
 
-            // 发送完成标记（包含数据库生成的真实消息ID）
+            // 发送完成标记（包含数据库生成的真实消息ID和完整内容）
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 type: 'agent_done',
                 agent_id: agent.id,
                 msg_id: msgId,
-                db_msg_id: insertedMsg?.id // 数据库生成的真实ID
+                db_msg_id: insertedMsg?.id, // 数据库生成的真实ID
+                content: insertedMsg?.content // 数据库保存的完整内容
               })}\n\n`
             ));
 

@@ -227,10 +227,18 @@ export default function ConversationDetailPage() {
                   setMessages(prev =>
                     prev.map(msg => {
                       if (msg.id === parsed.msg_id) {
-                        const updatedMsg = { ...msg, streaming: false, done: true };
+                        const updatedMsg = { 
+                          ...msg, 
+                          streaming: false, 
+                          done: true 
+                        };
                         // 如果后端返回了数据库生成的真实ID，则替换临时ID
                         if (parsed.db_msg_id) {
                           updatedMsg.id = parsed.db_msg_id;
+                        }
+                        // 如果后端返回了完整内容，用数据库内容替换前端累积的内容
+                        if (parsed.content) {
+                          updatedMsg.content = parsed.content;
                         }
                         return updatedMsg;
                       }
