@@ -146,10 +146,10 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     return (
       <div className="message-content space-y-2">
         {/* 整体操作按钮 */}
-        <div className="flex items-center justify-between mb-2 bg-muted/50 rounded-lg p-2">
+        <div className="flex items-center justify-between mb-2 border-b pb-2">
           <div className="flex gap-2">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               className="h-7 text-xs"
               onClick={() => toggleAllSections(true)}
@@ -158,7 +158,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
               全部展开
             </Button>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               className="h-7 text-xs"
               onClick={() => toggleAllSections(false)}
@@ -167,7 +167,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
               全部收起
             </Button>
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               className="h-7 text-xs"
               onClick={() => setIsCollapsed(true)}
