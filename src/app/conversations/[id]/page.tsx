@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,8 @@ import {
   MoreHorizontal,
   Trash2,
   AtSign,
-  Square
+  Square,
+  ArrowDown
 } from 'lucide-react';
 import type { Conversation, Message } from '@/types/conversation';
 import type { Agent } from '@/types/agent';
@@ -120,7 +121,6 @@ export default function ConversationDetailPage() {
   const [inputMessage, setInputMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [aiResponding, setAiResponding] = useState(false);
-  const [isManuallyStopped, setIsManuallyStopped] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState('');
   const [respondingAgent, setRespondingAgent] = useState<Agent | null>(null);
   // 多智能体流式输出跟踪
@@ -129,24 +129,9 @@ export default function ConversationDetailPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 智能滚动控制
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-
-  // 检测是否在底部附近（阈值10px）
-  const checkIfAtBottom = useCallback(() => {
-    if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    const threshold = 10; // 底部10px内算作在底部
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const atBottom = distanceFromBottom <= threshold;
-
-    // 如果用户滚动到底部，恢复自动滚动
-    if (atBottom) {
-      setShouldAutoScroll(true);
-    }
-
-    return atBottom;
-  }, []);
+  // 智能滚动控制（使用 useRef 避免不必要的重渲染）
+  const shouldAutoScrollRef = useRef(true);
+  const isUserScrolledRef = useRef(false);
 
   // 监听滚动事件
   useEffect(() => {
@@ -154,11 +139,18 @@ export default function ConversationDetailPage() {
     if (!scrollContainer) return;
 
     const handleScroll = () => {
-      // 检测是否在底部
-      const atBottom = checkIfAtBottom();
-      if (!atBottom) {
-        // 用户滚动到了非底部位置，完全停止自动滚动
-        setShouldAutoScroll(false);
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const threshold = 20; // 底部20px内算作底部
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      const atBottom = distanceFromBottom <= threshold;
+
+      if (atBottom) {
+        // 用户滚动到底部，恢复自动滚动
+        shouldAutoScrollRef.current = true;
+        isUserScrolledRef.current = false;
+      } else {
+        // 用户滚动到非底部位置，完全停止自动滚动
+        isUserScrolledRef.current = true;
       }
     };
 
@@ -166,14 +158,14 @@ export default function ConversationDetailPage() {
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
     };
-  }, [checkIfAtBottom]);
+  }, []);
 
-  // 智能自动滚动：只有当 shouldAutoScroll 为 true 时才自动滚动
+  // 智能自动滚动：只有当用户没有手动滚动时才自动滚动
   useEffect(() => {
-    if (shouldAutoScroll) {
+    if (shouldAutoScrollRef.current && !isUserScrolledRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, streamingMessage, shouldAutoScroll]);
+  }, [messages, streamingMessage]);
   // 管理参与者相关状态
   const [showManageDialog, setShowManageDialog] = useState(false);
   const [allAgents, setAllAgents] = useState<Agent[]>([]);
@@ -194,13 +186,15 @@ export default function ConversationDetailPage() {
   }, [conversationId]);
 
   // 停止生成
-  // 停止生成
   const handleStopGeneration = () => {
-    // 标记为用户主动停止
-    setIsManuallyStopped(true);
-
+    // 取消请求（使用 try-catch 避免重复关闭错误）
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      try {
+        abortControllerRef.current.abort();
+      } catch (e) {
+        // 忽略重复关闭的错误
+        console.log('Controller already closed:', e);
+      }
       abortControllerRef.current = null;
     }
 
@@ -235,6 +229,13 @@ export default function ConversationDetailPage() {
     setCurrentStreamMessageId(null);
     setCurrentStreamMessageType(null);
     setRespondingAgent(null);
+  };
+
+  // 滚动到底部
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    shouldAutoScrollRef.current = true;
+    isUserScrolledRef.current = false;
   };
 
   const fetchConversation = async () => {
@@ -295,9 +296,6 @@ export default function ConversationDetailPage() {
     const userMessage = inputMessage.trim();
     setInputMessage('');
     setSending(true);
-
-    // 重置手动停止标志
-    setIsManuallyStopped(false);
 
     try {
       // 先添加用户消息到界面
@@ -514,33 +512,24 @@ export default function ConversationDetailPage() {
     } catch (error) {
       console.error('发送消息失败:', error);
 
-      // 如果是用户主动停止，不显示错误
+      // 如果是用户主动停止（AbortError），不显示错误提示
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('用户停止了生成');
-        // 已经在 handleStopGeneration 中处理了，这里不需要额外操作
+        // 不显示错误，保留已输出的内容
       } else {
+        // 其他错误才显示提示
         alert(error instanceof Error ? error.message : '发送失败');
         // 移除失败的用户消息
         setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
       }
     } finally {
       setSending(false);
-
-      // 清除状态
+      setAiResponding(false);
+      setStreamingMessage('');
       setCurrentStreamMessageId(null);
       setCurrentStreamMessageType(null);
       setRespondingAgent(null);
       abortControllerRef.current = null;
-
-      // 如果不是用户主动停止，才清空 streamingMessage 和设置 aiResponding
-      if (!isManuallyStopped) {
-        setAiResponding(false);
-        setStreamingMessage('');
-      } else {
-        // 用户主动停止，保留流式消息并重置标志
-        setAiResponding(false);
-        setIsManuallyStopped(false);
-      }
     }
   };
 
@@ -985,6 +974,18 @@ export default function ConversationDetailPage() {
 
               <div ref={messagesEndRef} />
             </div>
+          )}
+
+          {/* 有新消息提示按钮 */}
+          {isUserScrolledRef.current && aiResponding && (
+            <Button
+              onClick={scrollToBottom}
+              className="fixed bottom-32 right-8 rounded-full shadow-lg"
+              size="sm"
+            >
+              <ArrowDown className="h-4 w-4 mr-1" />
+              有新消息
+            </Button>
           )}
         </div>
 
