@@ -22,6 +22,13 @@ interface Section {
 }
 
 export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false }: MessageContentProps) {
+  console.log(`[MessageContent] 收到内容:`, {
+    contentLength: content.length,
+    isStreaming,
+    parallelMode,
+    contentPreview: content.substring(0, 200)
+  });
+
   // 从全局配置获取消息折叠配置
   const finalConfig = useMessageConfig();
 
@@ -294,12 +301,18 @@ function parseSections(content: string): Section[] {
     if (line.match(/^#{2,3}\s+/)) {
       // 保存上一节
       if (currentSection.title && currentSection.content !== undefined) {
-        sections.push({
+        const newSection = {
           id: `section-${sectionCount++}`,
           title: currentSection.title,
           level: currentSection.level || 2,
           content: currentSection.content.trim(),
+        };
+        console.log(`[parseSections] 保存章节 ${sectionCount - 1}:`, {
+          title: newSection.title,
+          contentLength: newSection.content.length,
+          contentPreview: newSection.content.substring(0, 100)
         });
+        sections.push(newSection);
       }
 
       // 开始新一节
@@ -331,12 +344,18 @@ function parseSections(content: string): Section[] {
 
   // 保存最后一节
   if (currentSection.title && currentSection.content !== undefined) {
-    sections.push({
+    const newSection = {
       id: `section-${sectionCount++}`,
       title: currentSection.title,
       level: currentSection.level || 2,
       content: currentSection.content.trim(),
+    };
+    console.log(`[parseSections] 保存最后一节:`, {
+      title: newSection.title,
+      contentLength: newSection.content.length,
+      contentPreview: newSection.content.substring(0, 100)
     });
+    sections.push(newSection);
   }
 
   // 如果没有标题，返回整个内容作为一节
@@ -349,11 +368,20 @@ function parseSections(content: string): Section[] {
     });
   }
 
+  console.log(`[parseSections] 总共解析出 ${sections.length} 个章节`);
   return sections;
 }
 
 // 章节项组件
 function SectionItem({ section, isExpanded, onToggle }: { section: Section; isExpanded: boolean; onToggle: () => void }) {
+  console.log(`[SectionItem] 渲染章节:`, {
+    id: section.id,
+    title: section.title,
+    contentLength: section.content.length,
+    contentPreview: section.content.substring(0, 100),
+    isExpanded
+  });
+
   if (!section.title) {
     // 前言，不折叠
     return (
@@ -394,6 +422,8 @@ function SectionItem({ section, isExpanded, onToggle }: { section: Section; isEx
 
 // 渲染 Markdown 内容
 function renderMarkdown(text: string) {
+  console.log(`[renderMarkdown] 输入长度: ${text.length}, 内容预览:`, text.substring(0, 100));
+
   const lines = text.split('\n');
   const renderedElements: React.ReactElement[] = [];
   let i = 0;
