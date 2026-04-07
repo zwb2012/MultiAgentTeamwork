@@ -298,10 +298,33 @@ export default function ConversationDetailPage() {
     requestAnimationFrame(() => {
       // 再等待一帧，确保滚动动画已经开始
       setTimeout(() => {
-        lastAutoScrollTime.current = Date.now();
-        isSmoothScrolling.current = false; // 解锁，允许 useEffect 的自动滚动
-        console.log('✅ 平滑滚动完成，更新 lastAutoScrollTime 并解锁');
-      }, 300); // 平滑滚动通常需要 300-500ms，这里取 300ms
+        // 检查是否真的到达了底部
+        const scrollContainer = scrollRef.current;
+        if (scrollContainer) {
+          const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+          const threshold = 20; // 底部20px内算作底部
+          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+          const atBottom = distanceFromBottom <= threshold;
+
+          if (atBottom) {
+            // 确实到达了底部，正常解锁
+            lastAutoScrollTime.current = Date.now();
+            isSmoothScrolling.current = false;
+            console.log('✅ 平滑滚动完成，已到达底部，更新 lastAutoScrollTime 并解锁');
+          } else {
+            // 没有到达底部（可能被用户手动滚动打断），立即执行立即滚动
+            console.log(`⚠️ 平滑滚动未完成（距离底部 ${distanceFromBottom.toFixed(1)}px），执行立即滚动`);
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+            lastAutoScrollTime.current = Date.now();
+            isSmoothScrolling.current = false;
+          }
+        } else {
+          // scrollContainer 不存在，直接解锁
+          lastAutoScrollTime.current = Date.now();
+          isSmoothScrolling.current = false;
+          console.log('⚠️ scrollContainer 不存在，直接解锁');
+        }
+      }, 500); // 延长到 500ms，确保平滑滚动有足够时间完成
     });
   };
 
