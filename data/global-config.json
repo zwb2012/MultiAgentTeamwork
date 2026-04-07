@@ -14,5 +14,10 @@
     "auto_health_check": false,
     "health_check_interval": 30
   },
-  "updated_at": "2026-04-03T14:25:57.438Z"
+  "ui": {
+    "message": {
+      "collapseMode": "default"
+    }
+  },
+  "updated_at": "2026-04-07T08:36:07.703Z"
 }

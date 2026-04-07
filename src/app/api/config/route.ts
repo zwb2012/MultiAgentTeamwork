@@ -39,14 +39,14 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { llm, git, settings } = body;
-    
+    const { llm, git, settings, ui } = body;
+
     const updateData: Record<string, unknown> = {};
-    
+
     if (llm) {
       updateData.llm = llm;
     }
-    
+
     if (git) {
       // 如果传入了新的 token，加密存储
       if (git.token && git.token !== '••••••••••••' && !git.token.startsWith('•')) {
@@ -63,11 +63,15 @@ export async function PUT(request: NextRequest) {
         };
       }
     }
-    
+
     if (settings) {
       updateData.settings = settings;
     }
-    
+
+    if (ui) {
+      updateData.ui = ui;
+    }
+
     const newConfig = saveGlobalConfig(updateData);
     
     // 返回时隐藏敏感信息

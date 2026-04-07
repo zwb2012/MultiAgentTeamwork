@@ -188,7 +188,12 @@ export default function ConversationDetailPage() {
       const msgRes = await fetch(`/api/conversations/${conversationId}/messages`);
       const msgResult = await msgRes.json();
       if (msgResult.success) {
-        setMessages(msgResult.data || []);
+        // 从数据库加载的消息，提取 parallel_mode 到顶层
+        const messagesWithParallelMode = (msgResult.data || []).map((msg: Message) => ({
+          ...msg,
+          parallel_mode: msg.metadata?.parallel_mode === true
+        }));
+        setMessages(messagesWithParallelMode);
       }
     } catch (error) {
       console.error('获取会话详情失败:', error);
