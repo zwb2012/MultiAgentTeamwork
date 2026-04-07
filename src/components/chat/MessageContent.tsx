@@ -12,6 +12,7 @@ interface MessageContentProps {
   maxLength?: number;
   isStreaming?: boolean;
   parallelMode?: boolean; // 是否为多智能体并行模式
+  isUserMessage?: boolean; // 是否为用户消息
 }
 
 interface Section {
@@ -21,7 +22,7 @@ interface Section {
   id: string;
 }
 
-export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false }: MessageContentProps) {
+export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false, isUserMessage = false }: MessageContentProps) {
   console.log(`[MessageContent] 收到内容:`, {
     contentLength: content.length,
     isStreaming,
@@ -146,30 +147,30 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     return (
       <div className="message-content">
         {/* 上半部分：工具栏 */}
-        <div className="flex items-center justify-between border border-b-0 rounded-t-md p-2 bg-muted">
+        <div className={`flex items-center justify-between border border-b-0 rounded-t-md p-2 ${isUserMessage ? 'bg-transparent' : 'bg-muted'}`}>
           <div className="flex gap-1.5">
             <Button
-              variant="secondary"
+              variant={isUserMessage ? "ghost" : "secondary"}
               size="sm"
-              className="h-8 text-xs"
+              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
               onClick={() => toggleAllSections(true)}
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               全部展开
             </Button>
             <Button
-              variant="secondary"
+              variant={isUserMessage ? "ghost" : "secondary"}
               size="sm"
-              className="h-8 text-xs"
+              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
               onClick={() => toggleAllSections(false)}
             >
               <Minus className="h-3.5 w-3.5 mr-1" />
               全部收起
             </Button>
             <Button
-              variant="secondary"
+              variant={isUserMessage ? "ghost" : "secondary"}
               size="sm"
-              className="h-8 text-xs"
+              className={`h-8 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
               onClick={() => setIsCollapsed(true)}
             >
               <ChevronUp className="h-3.5 w-3.5 mr-1" />
@@ -179,19 +180,19 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2"
+            className={`h-8 px-2 ${isUserMessage ? 'hover:bg-white/20' : ''}`}
             onClick={handleCopy}
           >
             {copied ? (
               <Check className="h-3.5 w-3.5 text-green-500" />
             ) : (
-              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+              <Copy className={`h-3.5 w-3.5 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`} />
             )}
           </Button>
         </div>
 
         {/* 下半部分：对话内容 */}
-        <div className="border rounded-b-md p-3 bg-background">
+        <div className={`border rounded-b-md p-3 ${isUserMessage ? 'bg-transparent' : 'bg-background'}`}>
           {/* 渲染各章节 */}
           {sections.map(section => (
             <SectionItem
@@ -231,13 +232,13 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs"
+            className={`h-7 text-xs ${isUserMessage ? 'hover:bg-white/20' : ''}`}
             onClick={() => setIsCollapsed(false)}
           >
             <ChevronDown className="h-3 w-3 mr-1" />
             展开
           </Button>
-          <span className="text-xs text-muted-foreground line-clamp-1">{preview}</span>
+          <span className={`text-xs line-clamp-1 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`}>{preview}</span>
         </div>
       </div>
     );
@@ -255,7 +256,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
           <Button
             variant="ghost"
             size="sm"
-            className="text-xs h-7"
+            className={`text-xs h-7 ${isUserMessage ? 'hover:bg-white/20' : ''}`}
             onClick={() => setIsExpanded(!isExpanded)}
           >
             {isExpanded ? (
@@ -278,10 +279,10 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
         <Button
           variant="ghost"
           size="sm"
-          className="absolute top-2 right-2 h-6 px-2 opacity-0 hover:opacity-100 transition-opacity"
+          className={`absolute top-2 right-2 h-6 px-2 opacity-0 hover:opacity-100 transition-opacity ${isUserMessage ? 'hover:bg-white/20' : ''}`}
           onClick={() => setIsCollapsed(true)}
         >
-          <Minus className="h-3 w-3 text-muted-foreground" />
+          <Minus className={`h-3 w-3 ${isUserMessage ? 'text-white/80' : 'text-muted-foreground'}`} />
         </Button>
       )}
     </div>

@@ -983,6 +983,7 @@ export default function ConversationDetailPage() {
                           content={msg.content}
                           isStreaming={msg.streaming || false}
                           parallelMode={msg.parallel_mode === true}
+                          isUserMessage={isUser}
                         />
                         {/* 流式状态指示器 */}
                         {msg.streaming && !isUser && (
