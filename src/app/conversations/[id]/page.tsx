@@ -192,7 +192,49 @@ export default function ConversationDetailPage() {
               }
               try {
                 const parsed = JSON.parse(data);
-                if (parsed.content) {
+
+                // 处理新的并行流式消息类型（优先处理）
+                if (parsed.type === 'agent_start') {
+                  // 创建新的消息卡片
+                  const newMsg: Message = {
+                    id: parsed.msg_id,
+                    conversation_id: conversationId,
+                    agent_id: parsed.agent_id,
+                    role: 'assistant',
+                    content: '',
+                    created_at: new Date().toISOString(),
+                    message_type: 'text',
+                    metadata: {
+                      agent_name: parsed.agent_name,
+                      project_id: parsed.project_id,
+                      role: parsed.role
+                    },
+                    streaming: true,
+                    done: false
+                  };
+                  setMessages(prev => [...prev, newMsg]);
+                } else if (parsed.type === 'agent_chunk') {
+                  // 更新对应消息的流式内容
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === parsed.msg_id
+                        ? { ...msg, content: msg.content + parsed.content }
+                        : msg
+                    )
+                  );
+                } else if (parsed.type === 'agent_done') {
+                  // 标记消息完成
+                  setMessages(prev =>
+                    prev.map(msg =>
+                      msg.id === parsed.msg_id
+                        ? { ...msg, streaming: false, done: true }
+                        : msg
+                    )
+                  );
+                }
+
+                // 处理旧的单智能体和串行模式（兼容性保留）
+                if (parsed.content && !parsed.type?.startsWith('agent_')) {
                   // 检查是否是新消息类型（多智能体协调模式）
                   const messageType = parsed.type; // 'coordinator' | 'agent'
 
@@ -262,46 +304,6 @@ export default function ConversationDetailPage() {
                       if (agent) setRespondingAgent(agent);
                     }
                   }
-                }
-
-                // 处理新的并行流式消息类型
-                if (parsed.type === 'agent_start') {
-                  // 创建新的消息卡片
-                  const newMsg: Message = {
-                    id: parsed.msg_id,
-                    conversation_id: conversationId,
-                    agent_id: parsed.agent_id,
-                    role: 'assistant',
-                    content: '',
-                    created_at: new Date().toISOString(),
-                    message_type: 'text',
-                    metadata: {
-                      agent_name: parsed.agent_name,
-                      project_id: parsed.project_id,
-                      role: parsed.role
-                    },
-                    streaming: true,
-                    done: false
-                  };
-                  setMessages(prev => [...prev, newMsg]);
-                } else if (parsed.type === 'agent_chunk') {
-                  // 更新对应消息的流式内容
-                  setMessages(prev =>
-                    prev.map(msg =>
-                      msg.id === parsed.msg_id
-                        ? { ...msg, content: msg.content + parsed.content }
-                        : msg
-                    )
-                  );
-                } else if (parsed.type === 'agent_done') {
-                  // 标记消息完成
-                  setMessages(prev =>
-                    prev.map(msg =>
-                      msg.id === parsed.msg_id
-                        ? { ...msg, streaming: false, done: true }
-                        : msg
-                    )
-                  );
                 }
 
                 if (parsed.error) {
