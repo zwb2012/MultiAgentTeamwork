@@ -325,19 +325,21 @@ function parseSections(content: string): Section[] {
     } else {
       // 添加到当前节内容
       if (currentSection.title !== undefined) {
+        // 当前有标题，添加到当前章节
         currentSection.content = (currentSection.content || '') + line + '\n';
       } else {
-        // 前言内容
-        if (!sections[0]?.title) {
+        // 没有标题，作为前言
+        if (sections.length === 0) {
+          // 创建前言章节
           sections.push({
             id: `section-${sectionCount++}`,
             title: '',
             level: 0,
-            content: (sections[0]?.content || '') + line + '\n',
+            content: '',
           });
-        } else {
-          sections[0].content += line + '\n';
         }
+        // 添加到前言章节
+        sections[0].content += line + '\n';
       }
     }
   }
@@ -358,7 +360,7 @@ function parseSections(content: string): Section[] {
     sections.push(newSection);
   }
 
-  // 如果没有标题，返回整个内容作为一节
+  // 如果没有章节，返回整个内容作为一节
   if (sections.length === 0) {
     sections.push({
       id: 'section-0',
