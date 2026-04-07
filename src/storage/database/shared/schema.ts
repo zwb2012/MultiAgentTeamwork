@@ -436,6 +436,21 @@ export const healthCheck = pgTable("health_check", {
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
 
+// 智能体角色表
+export const agent_roles = pgTable(
+  "agent_roles",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 128 }).notNull().unique(),
+    description: text("description"),
+    permissions: jsonb("permissions"),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("agent_roles_name_idx").on(table.name),
+  ]
+);
+
 // ============================================
 // 项目管理表
 // ============================================

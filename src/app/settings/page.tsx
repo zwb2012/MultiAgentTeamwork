@@ -91,9 +91,26 @@ export default function SettingsPage() {
         if (result.data.settings) {
           setSettings(result.data.settings);
         }
-        // 读取 UI 配置
+        // 读取 UI 配置（兼容旧格式）
         if (result.data.ui?.message) {
-          setMessageUI(result.data.ui.message);
+          const msgConfig = result.data.ui.message;
+          // 检查是否是新格式（有 autoMinimize 字段）
+          if (msgConfig.autoMinimize) {
+            setMessageUI(msgConfig);
+          } else {
+            // 旧格式，使用默认配置
+            console.log('检测到旧配置格式，使用默认值');
+            setMessageUI({
+              autoMinimize: { charCount: 500, lineCount: 15 },
+              autoSectionFold: { charCount: 200, lineCount: 8 },
+              autoTruncate: { charCount: 80, lineCount: 3 },
+              collapsedPreviewLength: 60,
+              defaultMaxLength: 80,
+              codeBlockMaxLength: 300,
+              aggressiveTruncateLength: 150,
+              defaultExpandedSections: 3,
+            });
+          }
         }
       }
     } catch (error) {

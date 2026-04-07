@@ -16,8 +16,25 @@
   },
   "ui": {
     "message": {
-      "collapseMode": "default"
+      "collapseMode": "default",
+      "autoMinimize": {
+        "charCount": 10,
+        "lineCount": 2
+      },
+      "autoSectionFold": {
+        "charCount": 200,
+        "lineCount": 8
+      },
+      "autoTruncate": {
+        "charCount": 80,
+        "lineCount": 3
+      },
+      "collapsedPreviewLength": 60,
+      "defaultMaxLength": 80,
+      "codeBlockMaxLength": 300,
+      "aggressiveTruncateLength": 150,
+      "defaultExpandedSections": 3
     }
   },
-  "updated_at": "2026-04-07T08:36:07.703Z"
+  "updated_at": "2026-04-07T08:50:34.137Z"
 }
