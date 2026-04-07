@@ -41,8 +41,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     return parseSections(content);
   }, [content]);
 
-  // 检查是否应该使用章节折叠（只要不是流式输出，就使用章节折叠模式）
-  const shouldUseSectionFolding = !isStreaming;
+  // 检查是否应该使用章节折叠（非流式输出且非用户消息）
+  const shouldUseSectionFolding = !isStreaming && !isUserMessage;
 
   // 自动判断初始折叠状态（使用配置）
   // 并行模式下强制触发最小化折叠（用户消息除外）
