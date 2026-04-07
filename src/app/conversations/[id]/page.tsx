@@ -131,7 +131,7 @@ export default function ConversationDetailPage() {
 
   // 智能滚动控制（微信/企微标准实现）
   const isUserScrolledAway = useRef(false); // 用户是否滚离底部
-  const isAutoScrolling = useRef(false); // 是否正在执行自动滚动（用于区分程序性滚动和用户手动滚动）
+  const lastAutoScrollTime = useRef(0); // 记录上次自动滚动的时间戳
 
   // 监听滚动事件
   useEffect(() => {
@@ -139,28 +139,30 @@ export default function ConversationDetailPage() {
     if (!scrollContainer) return;
 
     const handleScroll = () => {
-      // 如果正在自动滚动，不处理（避免程序性滚动覆盖用户状态）
-      if (isAutoScrolling.current) {
-        console.log('→ 跳过滚动事件（自动滚动中）');
-        return;
-      }
-
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
       const threshold = 20; // 底部20px内算作底部
       const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
       const atBottom = distanceFromBottom <= threshold;
 
-      console.log('滚动事件（用户手动）:', {
+      console.log('滚动事件:', {
         scrollTop,
         scrollHeight,
         clientHeight,
         distanceFromBottom,
         atBottom,
-        isUserScrolledAway: isUserScrolledAway.current
+        isUserScrolledAway: isUserScrolledAway.current,
+        timeSinceLastAutoScroll: Date.now() - lastAutoScrollTime.current
       });
+
+      // 如果距离上次自动滚动不超过 100ms，认为是程序性滚动，忽略
+      if (Date.now() - lastAutoScrollTime.current < 100) {
+        console.log('→ 跳过滚动事件（程序性滚动）');
+        return;
+      }
 
       // 微信/企微逻辑：不在底部就是 true，在底部就是 false
       isUserScrolledAway.current = !atBottom;
+      console.log('→ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
     };
 
     scrollContainer.addEventListener('scroll', handleScroll);
@@ -181,19 +183,12 @@ export default function ConversationDetailPage() {
     // 只有当用户在底部时，才自动滚动
     if (!isUserScrolledAway.current) {
       console.log('⬇️ 执行自动滚动到底部');
-      // 标记正在自动滚动，避免 scroll 事件干扰
-      isAutoScrolling.current = true;
+
+      // 记录自动滚动时间戳
+      lastAutoScrollTime.current = Date.now();
 
       // 使用 behavior: 'auto' 避免平滑滚动触发多次 scroll 事件
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-
-      // 等待滚动完成后重置标记（使用 requestAnimationFrame 确保在下一帧重置）
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          isAutoScrolling.current = false;
-          console.log('→ 自动滚动完成，重置标记');
-        });
-      });
     } else {
       console.log('⏹️ 不执行自动滚动，用户已滚离底部');
     }
@@ -266,19 +261,12 @@ export default function ConversationDetailPage() {
   // 滚动到底部
   const scrollToBottom = () => {
     console.log('→ 用户点击"有新消息"，滚动到底部');
-    // 标记正在自动滚动，避免 scroll 事件干扰
-    isAutoScrolling.current = true;
+
+    // 记录自动滚动时间戳
+    lastAutoScrollTime.current = Date.now();
 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     isUserScrolledAway.current = false; // 回到底部，恢复自动滚动
-
-    // 等待滚动完成后重置标记
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        isAutoScrolling.current = false;
-        console.log('→ 自动滚动完成，重置标记');
-      });
-    });
   };
 
   const fetchConversation = async () => {
@@ -332,17 +320,9 @@ export default function ConversationDetailPage() {
             console.log('✓ 消息加载完成，自动滚动到最下面');
             isUserScrolledAway.current = false; // 回到底部
 
-            // 标记正在自动滚动，避免 scroll 事件干扰
-            isAutoScrolling.current = true;
+            // 记录自动滚动时间戳
+            lastAutoScrollTime.current = Date.now();
             messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-
-            // 等待滚动完成后重置标记
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                isAutoScrolling.current = false;
-                console.log('→ 自动滚动完成，重置标记');
-              });
-            });
           }
         }, 100);
       }
