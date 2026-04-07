@@ -40,8 +40,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     return parseSections(content);
   }, [content]);
 
-  // 检查是否应该使用章节折叠
-  const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
+  // 检查是否应该使用章节折叠（只要不是流式输出，就使用章节折叠模式）
+  const shouldUseSectionFolding = !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
   // 并行模式下强制触发最小化折叠（不管内容长短，不管是否流式输出）
@@ -83,11 +83,9 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
         }
         setIsCollapsed(minimizeFlag);
 
-        // 如果有多个章节，也更新章节展开状态
-        if (sections.length > 1) {
-          const count = finalConfig.defaultExpandedSections;
-          setExpandedSections(new Set(sections.slice(0, count).map(s => s.id)));
-        }
+        // 更新章节展开状态
+        const count = finalConfig.defaultExpandedSections;
+        setExpandedSections(new Set(sections.slice(0, count).map(s => s.id)));
       }, 500); // 500ms 延迟
 
       return () => clearTimeout(timer);
