@@ -262,7 +262,7 @@ export default function ConversationDetailPage() {
                 // 处理新的并行流式消息类型（优先处理）
                 if (parsed.type === 'agent_start') {
                   // 创建新的消息卡片
-                  console.log('[agent_start] parallel_mode:', parsed.parallel_mode);
+                  const isParallelMode = parsed.parallel_mode === true;
                   const newMsg: Message = {
                     id: parsed.msg_id,
                     conversation_id: conversationId,
@@ -275,23 +275,22 @@ export default function ConversationDetailPage() {
                       agent_name: parsed.agent_name,
                       project_id: parsed.project_id,
                       role: parsed.role,
-                      parallel_mode: parsed.parallel_mode || false
+                      parallel_mode: isParallelMode
                     },
                     streaming: true,
-                    done: false
+                    done: false,
+                    // 直接在消息对象中记录并行模式，避免依赖 metadata 读取不稳定
+                    parallel_mode: isParallelMode
                   };
                   setMessages(prev => [...prev, newMsg]);
                 } else if (parsed.type === 'agent_chunk') {
                   // 更新对应消息的流式内容
                   setMessages(prev =>
-                    prev.map(msg => {
-                      if (msg.id === parsed.msg_id) {
-                        const updated = { ...msg, content: msg.content + parsed.content };
-                        console.log('[agent_chunk] msg_id:', parsed.msg_id, 'metadata preserved:', updated.metadata?.parallel_mode);
-                        return updated;
-                      }
-                      return msg;
-                    })
+                    prev.map(msg =>
+                      msg.id === parsed.msg_id
+                        ? { ...msg, content: msg.content + parsed.content }
+                        : msg
+                    )
                   );
                 } else if (parsed.type === 'agent_done') {
                   // 标记消息完成，并用数据库生成的真实ID替换临时ID
@@ -303,7 +302,6 @@ export default function ConversationDetailPage() {
                           streaming: false,
                           done: true
                         };
-                        console.log('[agent_done] msg_id:', parsed.msg_id, 'old metadata:', msg.metadata, 'new metadata after id update:', updatedMsg.metadata);
                         // 如果后端返回了数据库生成的真实ID，则替换临时ID
                         if (parsed.db_msg_id) {
                           updatedMsg.id = parsed.db_msg_id;
@@ -795,11 +793,10 @@ export default function ConversationDetailPage() {
 
                       {/* 消息气泡：只包含对话内容 */}
                       <div className={`message-bubble ${isUser ? 'user' : 'agent'}`}>
-                        {console.log('[Render MessageContent] msg_id:', msg.id, 'full msg:', { id: msg.id, metadata: msg.metadata, parallelMode: msg.metadata?.parallel_mode })}
                         <MessageContent
                           content={msg.content}
                           isStreaming={msg.streaming || false}
-                          parallelMode={msg.metadata?.parallel_mode === true}
+                          parallelMode={msg.parallel_mode === true}
                         />
                         {/* 流式状态指示器 */}
                         {msg.streaming && !isUser && (

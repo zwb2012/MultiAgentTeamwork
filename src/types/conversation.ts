@@ -91,6 +91,9 @@ export interface Message {
   streaming?: boolean;
   done?: boolean;
 
+  // 并行模式标志（前端使用，直接存储在消息对象中）
+  parallel_mode?: boolean;
+
   // 元数据
   metadata?: {
     task_id?: string;
@@ -98,6 +101,10 @@ export interface Message {
     pipeline_run_id?: string;
     transfer_from?: string; // 流转来源节点
     transfer_to?: string;   // 流转目标节点
+    parallel_mode?: boolean;
+    agent_name?: string;
+    project_id?: string;
+    role?: string;
     [key: string]: any;
   };
 

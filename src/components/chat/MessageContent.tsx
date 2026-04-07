@@ -22,11 +22,6 @@ interface Section {
 }
 
 export function MessageContent({ content, maxLength, isStreaming = false, parallelMode = false }: MessageContentProps) {
-  // 调试日志
-  if (parallelMode) {
-    console.log('[MessageContent] parallelMode=true, content length:', content.length, 'isStreaming:', isStreaming);
-  }
-
   // 从全局配置获取消息折叠配置
   const finalConfig = useMessageConfig();
 
