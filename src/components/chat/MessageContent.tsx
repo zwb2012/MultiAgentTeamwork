@@ -146,7 +146,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
     // 章节折叠模式
     return (
       <div className="message-content space-y-2">
-        {/* 工具按钮 - 用户消息不显示 */}
+        {/* 上方工具按钮 - 用户消息不显示 */}
         {!isStreaming && !isUserMessage && (
           <div className="flex items-center justify-start gap-2 pb-2 border-b">
             <Button
@@ -200,6 +200,51 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
             onToggle={() => toggleSection(section.id)}
           />
         ))}
+
+        {/* 下方工具按钮 - 用户消息不显示 */}
+        {!isStreaming && !isUserMessage && (
+          <div className="flex items-center justify-start gap-2 pt-2 border-t">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => toggleAllSections(true)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              全部展开
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => toggleAllSections(false)}
+            >
+              <Minus className="h-3 w-3 mr-1" />
+              全部收起
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setIsCollapsed(true)}
+            >
+              <ChevronUp className="h-3 w-3 mr-1" />
+              最小化
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={handleCopy}
+            >
+              {copied ? (
+                <Check className="h-3 w-3 text-green-500" />
+              ) : (
+                <Copy className="h-3 w-3 text-muted-foreground" />
+              )}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }
