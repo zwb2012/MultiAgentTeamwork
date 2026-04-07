@@ -503,7 +503,6 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
               projectContext,
               (chunk) => {
                 // 实时发送每个 chunk
-                console.log(`[DEBUG] Agent ${agent.name} chunk:`, chunk.length > 50 ? chunk.substring(0, 50) + '...' : chunk);
                 controller.enqueue(encoder.encode(
                   `data: ${JSON.stringify({
                     type: 'agent_chunk',
@@ -514,9 +513,6 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
                 ));
               }
             );
-
-            console.log(`[DEBUG] Agent ${agent.name} fullResponse length:`, fullResponse.length);
-            console.log(`[DEBUG] Agent ${agent.name} fullResponse preview:`, fullResponse.substring(0, 200));
 
             // 保存完整消息到数据库
             const { data: insertedMsg, error: insertError } = await client
@@ -539,20 +535,16 @@ ${mentionedAgents.map(a => `- ${a.name} (ID: ${a.id})`).join('\n')}
 
             if (insertError) {
               console.error('保存消息到数据库失败:', insertError);
-            } else {
-              console.log(`[DEBUG] Agent ${agent.name} saved to database, msg_id: ${insertedMsg.id}`);
-              console.log(`[DEBUG] Saved content length:`, insertedMsg.content.length);
-              console.log(`[DEBUG] Saved content preview:`, insertedMsg.content.substring(0, 200));
             }
 
-            // 发送完成标记（包含数据库生成的真实消息ID和完整内容）
+            // 发送完成标记（包含数据库生成的真实消息ID）
+            // 注意：不返回数据库的content字段，直接使用本地累积的fullResponse确保一致性
             controller.enqueue(encoder.encode(
               `data: ${JSON.stringify({
                 type: 'agent_done',
                 agent_id: agent.id,
                 msg_id: msgId,
-                db_msg_id: insertedMsg?.id, // 数据库生成的真实ID
-                content: insertedMsg?.content // 数据库保存的完整内容
+                db_msg_id: insertedMsg?.id // 只返回数据库生成的真实ID
               })}\n\n`
             ));
 
@@ -718,19 +710,13 @@ async function callAgentWithStream(
   );
 
   let response = '';
-  let chunkCount = 0;
   for await (const chunk of stream) {
     if (chunk.content) {
       const content = chunk.content.toString();
       response += content;
-      chunkCount++;
-      console.log(`[DEBUG] Agent ${agent.name} chunk #${chunkCount}:`, content.length > 50 ? content.substring(0, 50) + '...' : content);
       onChunk(content); // 实时调用回调，将 chunk 发送到前端
     }
   }
-
-  console.log(`[DEBUG] Agent ${agent.name} total chunks: ${chunkCount}, final response length: ${response.length}`);
-  console.log(`[DEBUG] Agent ${agent.name} final response preview:`, response.substring(0, 200));
 
   return response;
 }

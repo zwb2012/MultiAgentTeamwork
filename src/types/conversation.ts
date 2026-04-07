@@ -86,7 +86,11 @@ export interface Message {
   role: 'system' | 'user' | 'assistant';
   content: string;
   message_type: MessageType;
-  
+
+  // 流式输出状态（前端使用）
+  streaming?: boolean;
+  done?: boolean;
+
   // 元数据
   metadata?: {
     task_id?: string;
@@ -96,6 +100,6 @@ export interface Message {
     transfer_to?: string;   // 流转目标节点
     [key: string]: any;
   };
-  
+
   created_at: string;
 }

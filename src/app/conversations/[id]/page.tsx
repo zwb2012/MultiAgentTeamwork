@@ -282,7 +282,6 @@ export default function ConversationDetailPage() {
                   setMessages(prev => [...prev, newMsg]);
                 } else if (parsed.type === 'agent_chunk') {
                   // 更新对应消息的流式内容
-                  console.log(`[DEBUG Frontend] Agent chunk for msg ${parsed.msg_id}:`, parsed.content.length > 50 ? parsed.content.substring(0, 50) + '...' : parsed.content);
                   setMessages(prev =>
                     prev.map(msg =>
                       msg.id === parsed.msg_id
@@ -292,9 +291,6 @@ export default function ConversationDetailPage() {
                   );
                 } else if (parsed.type === 'agent_done') {
                   // 标记消息完成，并用数据库生成的真实ID替换临时ID
-                  console.log(`[DEBUG Frontend] Agent done for msg ${parsed.msg_id}, db_msg_id: ${parsed.db_msg_id}`);
-                  console.log(`[DEBUG Frontend] Content from backend length:`, parsed.content?.length || 0);
-                  console.log(`[DEBUG Frontend] Content from backend preview:`, parsed.content ? parsed.content.substring(0, 200) : 'N/A');
                   setMessages(prev =>
                     prev.map(msg => {
                       if (msg.id === parsed.msg_id) {
@@ -306,10 +302,6 @@ export default function ConversationDetailPage() {
                         // 如果后端返回了数据库生成的真实ID，则替换临时ID
                         if (parsed.db_msg_id) {
                           updatedMsg.id = parsed.db_msg_id;
-                        }
-                        // 如果后端返回了完整内容，用数据库内容替换前端累积的内容
-                        if (parsed.content) {
-                          updatedMsg.content = parsed.content;
                         }
                         return updatedMsg;
                       }
