@@ -133,50 +133,60 @@ export default function ConversationDetailPage() {
   const isUserScrolledAway = useRef(false); // 用户是否滚离底部
   const lastAutoScrollTime = useRef(0); // 记录上次自动滚动的时间戳
 
-  // 监听滚动事件
+  // 监听滚动事件（当 loading 完成后绑定）
   useEffect(() => {
-    const scrollContainer = scrollRef.current;
-    console.log('🔍 useEffect 执行，scrollContainer =', scrollContainer);
-
-    if (!scrollContainer) {
-      console.log('❌ scrollContainer 不存在，无法绑定 scroll 事件');
+    if (isLoading) {
+      console.log('⏳ 正在加载，等待加载完成...');
       return;
     }
 
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-      const threshold = 20; // 底部20px内算作底部
-      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-      const atBottom = distanceFromBottom <= threshold;
+    // 等待下一帧，确保 DOM 已经渲染
+    const timer = setTimeout(() => {
+      const scrollContainer = scrollRef.current;
+      console.log('🔍 useEffect 执行（延迟），scrollContainer =', scrollContainer);
 
-      console.log('📜 滚动事件:', {
-        scrollTop,
-        scrollHeight,
-        clientHeight,
-        distanceFromBottom,
-        atBottom,
-        isUserScrolledAway: isUserScrolledAway.current,
-        timeSinceLastAutoScroll: Date.now() - lastAutoScrollTime.current
-      });
-
-      // 如果距离上次自动滚动不超过 500ms，认为是程序性滚动，忽略
-      if (Date.now() - lastAutoScrollTime.current < 500) {
-        console.log('⏭️ 跳过滚动事件（程序性滚动）');
+      if (!scrollContainer) {
+        console.log('❌ scrollContainer 不存在，无法绑定 scroll 事件');
         return;
       }
 
-      // 微信/企微逻辑：不在底部就是 true，在底部就是 false
-      isUserScrolledAway.current = !atBottom;
-      console.log('✅ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
-    };
+      const handleScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+        const threshold = 20; // 底部20px内算作底部
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+        const atBottom = distanceFromBottom <= threshold;
 
-    scrollContainer.addEventListener('scroll', handleScroll);
-    console.log('🎧 已绑定 scroll 事件处理器');
-    return () => {
-      scrollContainer.removeEventListener('scroll', handleScroll);
-      console.log('🔌 已解绑 scroll 事件处理器');
-    };
-  }, []);
+        console.log('📜 滚动事件:', {
+          scrollTop,
+          scrollHeight,
+          clientHeight,
+          distanceFromBottom,
+          atBottom,
+          isUserScrolledAway: isUserScrolledAway.current,
+          timeSinceLastAutoScroll: Date.now() - lastAutoScrollTime.current
+        });
+
+        // 如果距离上次自动滚动不超过 500ms，认为是程序性滚动，忽略
+        if (Date.now() - lastAutoScrollTime.current < 500) {
+          console.log('⏭️ 跳过滚动事件（程序性滚动）');
+          return;
+        }
+
+        // 微信/企微逻辑：不在底部就是 true，在底部就是 false
+        isUserScrolledAway.current = !atBottom;
+        console.log('✅ 用户手动滚动，设置 isUserScrolledAway =', isUserScrolledAway.current);
+      };
+
+      scrollContainer.addEventListener('scroll', handleScroll);
+      console.log('🎧 已绑定 scroll 事件处理器');
+      return () => {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+        console.log('🔌 已解绑 scroll 事件处理器');
+      };
+    }, 100); // 延迟 100ms 确保 DOM 已渲染
+
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // 智能自动滚动：只有当用户在底部时才自动滚动
   useEffect(() => {
