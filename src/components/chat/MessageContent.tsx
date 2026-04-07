@@ -37,10 +37,10 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  // 并行模式下强制触发最小化折叠（不管内容长短）
+  // 并行模式下强制触发最小化折叠（不管内容长短，不管是否流式输出）
   let shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
-  if (parallelMode && !isStreaming) {
-    // 并行模式下，所有消息都默认折叠
+  if (parallelMode) {
+    // 并行模式下，所有消息都默认折叠（包括流式输出期间）
     shouldAutoMinimizeFlag = true;
   }
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
