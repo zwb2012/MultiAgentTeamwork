@@ -37,8 +37,8 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
   const shouldUseSectionFolding = sections.length > 1 && !isStreaming;
 
   // 自动判断初始折叠状态（使用配置）
-  // 多智能体模式默认折叠，单智能体模式使用原有的折叠逻辑
-  const shouldAutoMinimizeFlag = parallelMode ? true : shouldAutoMinimize(content, isStreaming, finalConfig);
+  // 并行模式和普通模式使用相同的折叠逻辑，根据内容特征自动判断
+  const shouldAutoMinimizeFlag = shouldAutoMinimize(content, isStreaming, finalConfig);
   const shouldAutoSectionFoldFlag = shouldAutoSectionFold(content, isStreaming, shouldUseSectionFolding, finalConfig);
   const shouldAutoTruncateFlag = shouldAutoTruncate(content, isStreaming, finalConfig);
 
