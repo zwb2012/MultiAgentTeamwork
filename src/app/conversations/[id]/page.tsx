@@ -136,7 +136,12 @@ export default function ConversationDetailPage() {
   // 监听滚动事件
   useEffect(() => {
     const scrollContainer = scrollRef.current;
-    if (!scrollContainer) return;
+    console.log('🔍 useEffect 执行，scrollContainer =', scrollContainer);
+
+    if (!scrollContainer) {
+      console.log('❌ scrollContainer 不存在，无法绑定 scroll 事件');
+      return;
+    }
 
     const handleScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
@@ -169,6 +174,7 @@ export default function ConversationDetailPage() {
     console.log('🎧 已绑定 scroll 事件处理器');
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll);
+      console.log('🔌 已解绑 scroll 事件处理器');
     };
   }, []);
 
