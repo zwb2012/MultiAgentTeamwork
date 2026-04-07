@@ -636,14 +636,13 @@ export default function ConversationDetailPage() {
       }
       
     } catch (error) {
-      console.error('发送消息失败:', error);
-
-      // 如果是用户主动停止（AbortError），不显示错误提示
+      // 如果是用户主动停止（AbortError），不显示错误提示和日志
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('用户停止了生成');
         // 不显示错误，保留已输出的内容
       } else {
-        // 其他错误才显示提示
+        // 其他错误才显示提示和日志
+        console.error('发送消息失败:', error);
         alert(error instanceof Error ? error.message : '发送失败');
         // 移除失败的用户消息
         setMessages(prev => prev.filter(m => m.id !== `temp-${Date.now() - 1000}`));
