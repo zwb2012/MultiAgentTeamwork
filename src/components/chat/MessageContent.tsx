@@ -144,48 +144,48 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
     // 章节折叠模式
     return (
-      <div className="message-content space-y-2">
+      <div className="message-content space-y-3">
         {/* 整体操作按钮 */}
-        <div className="flex items-center justify-between mb-2 border-b pb-2">
-          <div className="flex gap-2">
+        <div className="flex items-center justify-between border rounded-md p-2 bg-background">
+          <div className="flex gap-1.5">
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-xs"
               onClick={() => toggleAllSections(true)}
             >
-              <Plus className="h-3 w-3 mr-1" />
+              <Plus className="h-3.5 w-3.5 mr-1" />
               全部展开
             </Button>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-xs"
               onClick={() => toggleAllSections(false)}
             >
-              <Minus className="h-3 w-3 mr-1" />
+              <Minus className="h-3.5 w-3.5 mr-1" />
               全部收起
             </Button>
             <Button
-              variant="secondary"
+              variant="outline"
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-xs"
               onClick={() => setIsCollapsed(true)}
             >
-              <ChevronUp className="h-3 w-3 mr-1" />
+              <ChevronUp className="h-3.5 w-3.5 mr-1" />
               最小化
             </Button>
           </div>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 px-2"
+            className="h-8 px-2"
             onClick={handleCopy}
           >
             {copied ? (
-              <Check className="h-3 w-3 text-green-500" />
+              <Check className="h-3.5 w-3.5 text-green-500" />
             ) : (
-              <Copy className="h-3 w-3 text-muted-foreground" />
+              <Copy className="h-3.5 w-3.5 text-muted-foreground" />
             )}
           </Button>
         </div>
