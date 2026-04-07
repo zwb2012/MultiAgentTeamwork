@@ -145,9 +145,9 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
 
     // 章节折叠模式
     return (
-      <div className={`message-content border rounded-md ${isUserMessage ? '' : 'bg-background'}`}>
+      <div className="message-content flex flex-col">
         {/* 上半部分：工具栏 */}
-        <div className={`flex items-center justify-between border-b p-2 ${isUserMessage ? 'bg-transparent' : 'bg-muted'}`}>
+        <div className={`flex items-center justify-between border-b p-2 ${isUserMessage ? 'bg-white/10' : 'bg-muted'}`}>
           <div className="flex gap-1.5">
             <Button
               variant={isUserMessage ? "ghost" : "secondary"}
@@ -192,7 +192,7 @@ export function MessageContent({ content, maxLength, isStreaming = false, parall
         </div>
 
         {/* 下半部分：对话内容 */}
-        <div className="p-3">
+        <div className="p-3 flex-1">
           {/* 渲染各章节 */}
           {sections.map(section => (
             <SectionItem
